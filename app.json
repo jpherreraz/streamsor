@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "HelloWorld",
-    "slug": "expo-template-default",
+    "name": "project3-cursor",
+    "slug": "streamsor",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,13 +9,15 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jpherrera.streamsor"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.jpherrera.streamsor"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +38,18 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ecb1bd07-858b-40de-be62-20101e711ec8"
+      }
+    },
+    "owner": "jpherrera",
+    "updates": {
+      "url": "https://u.expo.dev/ecb1bd07-858b-40de-be62-20101e711ec8"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
