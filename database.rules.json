@@ -1,0 +1,38 @@
+{
+  "rules": {
+    "streams": {
+      ".indexOn": ["streamKey", "userId"],
+      ".read": true,
+      ".write": false,
+      "$streamId": {
+        ".read": true,
+        ".write": false,
+        "viewerCount": {
+          ".write": false
+        }
+      }
+    },
+    "chats": {
+      ".read": true,
+      ".write": false,
+      "$streamId": {
+        ".read": true,
+        ".write": false,
+        "messages": {
+          ".read": true,
+          ".write": false,
+          ".indexOn": "timestamp"
+        }
+      }
+    },
+    "users": {
+      ".read": "auth != null",
+      ".write": false,
+      ".indexOn": ["streamKey"],
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    }
+  }
+} 
