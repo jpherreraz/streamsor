@@ -1,7 +1,7 @@
 import { Video } from 'expo-av';
 import { useLocalSearchParams } from 'expo-router';
 import { get, onValue, ref } from 'firebase/database';
-import { getFunctions } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import Hls from 'hls.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
@@ -13,8 +13,8 @@ interface Stream {
   title: string;
   streamerName: string;
   viewerCount: number;
-  isLive: boolean;
   streamKey: string;
+  liveInputId: string;
   playback?: {
     hls: string;
     dash: string;
@@ -46,9 +46,9 @@ export default function StreamScreen() {
   }, []);
 
   // Check if stream is ready on Cloudflare
-  const checkStreamReady = async (streamId: string) => {
+  const checkStreamReady = async (streamId: string, liveInputId: string) => {
     try {
-      // First check if stream exists and is active
+      // First check if stream exists
       const streamRef = ref(database, `streams/${streamId}`);
       const snapshot = await get(streamRef);
       const streamData = snapshot.val();
@@ -59,79 +59,43 @@ export default function StreamScreen() {
         return false;
       }
 
-      // Check if stream is in a valid state
-      const now = Date.now();
-      const wasRecentlyActive = streamData.lastActive && (now - streamData.lastActive) < 30000;
-      const isInitializing = streamData.startedAt && (now - streamData.startedAt) < 30000;
-      
-      if (!streamData.isLive && !wasRecentlyActive && !isInitializing) {
-        console.log('Stream is not live:', {
-          isLive: streamData.isLive,
-          wasRecentlyActive,
-          isInitializing,
-          lastActive: streamData.lastActive,
-          startedAt: streamData.startedAt,
-          status: streamData.status
+      // Check current status with Cloudflare
+      console.log('Checking stream status with Cloudflare');
+      const checkStreamStatusFn = httpsCallable(functions, 'checkStreamStatus');
+      const result = await checkStreamStatusFn({ streamId, liveInputId });
+      const status = result.data as { status: string; message: string; playback?: { hls: string; dash: string } };
+
+      console.log('Cloudflare status check result:', status);
+
+      if (status.status === 'live' && status.playback) {
+        // Check if the HLS endpoint is accessible
+        const response = await fetch(status.playback.hls, { method: 'HEAD' });
+        const isReady = response.ok;
+        
+        console.log('Stream ready check:', {
+          streamId,
+          isReady,
+          status: response.status,
+          statusText: response.statusText,
+          streamStatus: status.status
         });
         
-        if (streamData.status === 'error') {
-          setError(streamData.statusMessage || 'Stream encountered an error');
-        } else if (streamData.status === 'connecting') {
-          setError('Connecting to stream...');
+        if (isReady) {
+          setIsStreamReady(true);
+          setError(null);
         } else {
-          setError('Stream has ended');
-        }
-        return false;
-      }
-
-      // Then check if the HLS endpoint is accessible
-      if (!streamData?.playback?.hls) {
-        console.log('No HLS URL available');
-        if (streamData.isLive || wasRecentlyActive || isInitializing) {
           setError('Connecting to stream...');
-          return false;
         }
-        setError('Stream playback not available');
+        
+        return isReady;
+      } else {
+        console.log('Stream is not live:', status);
+        setError(status.message || 'Stream has ended');
         return false;
       }
-
-      const response = await fetch(streamData.playback.hls, { method: 'HEAD' });
-      const isReady = response.ok;
-      
-      console.log('Stream ready check:', {
-        streamId,
-        isReady,
-        status: response.status,
-        statusText: response.statusText,
-        wasRecentlyActive,
-        isInitializing,
-        streamStatus: streamData.status,
-        isLive: streamData.isLive
-      });
-      
-      if (isReady) {
-        setIsStreamReady(true);
-        setError(null);
-      } else if (streamData.isLive || wasRecentlyActive || isInitializing) {
-        setError('Connecting to stream...');
-      } else {
-        setError('Stream playback not available');
-      }
-      
-      return isReady;
     } catch (error) {
       console.log('Error checking stream readiness:', error);
-      // Don't show error if stream might be initializing
-      const streamData = stream;
-      const now = Date.now();
-      const wasRecentlyActive = streamData?.lastActive && (now - streamData.lastActive) < 60000;
-      const isInitializing = streamData && now - (streamData.startedAt || streamData.createdAt || now) < 60000;
-      
-      if (streamData?.isLive || wasRecentlyActive || isInitializing) {
-        setError('Connecting to stream...');
-      } else {
-        setError('Unable to connect to stream');
-      }
+      setError('Unable to connect to stream');
       return false;
     }
   };
@@ -143,89 +107,40 @@ export default function StreamScreen() {
       const data = snapshot.val();
       console.log('Stream data:', data);
       if (data) {
-        // Convert error states to connecting for live streams
-        const now = Date.now();
-        const wasRecentlyActive = data.lastActive && (now - data.lastActive) < 60000;
-        const isInitializing = now - (data.startedAt || data.createdAt || now) < 60000;
-        
-        let status = data.status;
-        let statusMessage = data.statusMessage;
-        
-        if (status === 'error' && (data.isLive || wasRecentlyActive || isInitializing)) {
-          status = 'connecting';
-          statusMessage = 'Connecting to stream...';
-        }
-
         setStream({
           id: id as string,
-          ...data,
-          status,
-          statusMessage
+          ...data
         });
         
-        // Clear error if stream is in a valid state
-        if (status === 'live' || (status === 'connecting' && (data.isLive || wasRecentlyActive || isInitializing))) {
-          setError(null);
-        }
+        // If stream exists, check its status with Cloudflare
+        const isReady = await checkStreamReady(id as string, data.liveInputId);
+        if (!isReady && !retryTimeoutRef.current) {
+          // Retry every 2 seconds for up to 60 seconds
+          let attempts = 0;
+          const maxAttempts = 30;
+          const checkInterval = 2000;
 
-        // If stream is marked as live or recently active, start checking if it's ready
-        if (data.isLive || wasRecentlyActive || isInitializing) {
-          const isReady = await checkStreamReady(id as string);
-          if (!isReady && !retryTimeoutRef.current) {
-            // Retry every 2 seconds for up to 60 seconds
-            let attempts = 0;
-            const maxAttempts = 30;
-            const checkInterval = 2000;
-
-            const attemptConnection = async () => {
-              attempts++;
-              const ready = await checkStreamReady(id as string);
-              
-              if (ready) {
-                if (retryTimeoutRef.current) {
-                  clearTimeout(retryTimeoutRef.current);
-                  retryTimeoutRef.current = null;
-                }
-                setIsStreamReady(true);
-                setError(null);
-              } else if (attempts < maxAttempts) {
-                retryTimeoutRef.current = setTimeout(attemptConnection, checkInterval);
-                // Update error message to show progress
-                setError(`Connecting to stream (attempt ${attempts}/${maxAttempts})...`);
-              } else {
-                // Don't show error if stream is still live or recently active
-                const streamData = (await get(streamRef)).val();
-                const isStillLive = streamData?.isLive;
-                const wasRecentlyActive = streamData?.lastActive && 
-                                       (Date.now() - streamData.lastActive) < 60000;
-                const isInitializing = Date.now() - (streamData?.startedAt || Date.now()) < 60000;
-                
-                if (isStillLive || wasRecentlyActive || isInitializing) {
-                  setError('Connecting to stream...');
-                  // Restart connection attempts
-                  attempts = 0;
-                  retryTimeoutRef.current = setTimeout(attemptConnection, checkInterval);
-                } else {
-                  setError('Stream is not available. Please try again later.');
-                }
+          const attemptConnection = async () => {
+            attempts++;
+            const ready = await checkStreamReady(id as string, data.liveInputId);
+            
+            if (ready) {
+              if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+                retryTimeoutRef.current = null;
               }
-            };
+              setIsStreamReady(true);
+              setError(null);
+            } else if (attempts < maxAttempts) {
+              retryTimeoutRef.current = setTimeout(attemptConnection, checkInterval);
+              // Update error message to show progress
+              setError(`Connecting to stream (attempt ${attempts}/${maxAttempts})...`);
+            } else {
+              setError('Stream is not available. Please try again later.');
+            }
+          };
 
-            attemptConnection();
-          }
-        } else {
-          // Check if stream was recently live
-          const lastActive = data.lastActive || data.updatedAt || data.startedAt || data.createdAt;
-          const wasRecentlyActive = lastActive && (Date.now() - lastActive) < 60000;
-          const isInitializing = Date.now() - (data.startedAt || data.createdAt || Date.now()) < 60000;
-          
-          if (wasRecentlyActive || isInitializing) {
-            setError('Stream is connecting...');
-          } else if (data.status === 'error') {
-            setError(data.statusMessage || 'Stream encountered an error');
-          } else {
-            setError('This stream has ended');
-          }
+          attemptConnection();
         }
       } else {
         setError('Stream not found');
@@ -299,7 +214,7 @@ export default function StreamScreen() {
                 break;
               default:
                 // For non-fatal errors, try to continue
-                if (stream.isLive) {
+                if (stream.status === 'live') {
                   console.log('Non-fatal error, attempting to continue...');
                   setError('Stream error. Attempting to reconnect...');
                   hls.startLoad();
@@ -317,7 +232,7 @@ export default function StreamScreen() {
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           video.play().catch((e) => {
             console.error('Failed to start playback:', e);
-            if (stream.isLive) {
+            if (stream.status === 'live') {
               setError('Connecting to stream...');
             } else {
               setError('Failed to start playback. Please refresh the page.');
@@ -347,7 +262,7 @@ export default function StreamScreen() {
         video.src = streamUrl;
         video.addEventListener('error', (e) => {
           console.error('Native HLS playback error:', e);
-          if (stream.isLive) {
+          if (stream.status === 'live') {
             setError('Stream error. Attempting to reconnect...');
           } else {
             setError('Stream playback error. Please refresh the page.');
@@ -355,7 +270,7 @@ export default function StreamScreen() {
         });
         video.play().catch((e) => {
           console.error('Failed to start playback:', e);
-          if (stream.isLive) {
+          if (stream.status === 'live') {
             setError('Connecting to stream...');
           } else {
             setError('Failed to start playback. Please refresh the page.');

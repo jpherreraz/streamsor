@@ -1,242 +1,122 @@
 import { useRouter } from 'expo-router';
-import { onValue, ref } from 'firebase/database';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { database } from '../firebase';
 
 interface Stream {
+  uid: string;
   id: string;
-  title: string;
-  streamerName: string;
-  thumbnailUrl: string;
+  liveInputId: string;
+  displayName?: string;
+  email?: string;
+  status: 'live' | 'offline';
+  title?: string;
   viewerCount: number;
-  startedAt: number;
-  status: 'live' | 'offline' | 'connecting';
-  statusMessage?: string;
-  lastActive?: number;
-  lastChecked?: number;
-  lastError?: string;
-  lastErrorTime?: number;
-  playback: boolean;
+  thumbnailUrl?: string;
+  playback?: {
+    hls: string;
+    dash: string;
+  };
 }
 
 export default function StreamView() {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const functions = getFunctions();
-  const statusCheckInterval = useRef<NodeJS.Timeout>();
-  const lastCheckTime = useRef<number>(0);
+  const refreshInterval = useRef<NodeJS.Timeout>();
 
-  const checkStreamStatuses = async (streamsList: Stream[]) => {
-    // Prevent multiple simultaneous checks
-    if (isChecking) return;
-    
-    // Add delay between checks
-    const now = Date.now();
-    if (now - lastCheckTime.current < 5000) return; // Minimum 5 seconds between checks
-    
-    setIsChecking(true);
-    lastCheckTime.current = now;
-
-    const checkStreamStatus = httpsCallable(functions, 'checkStreamStatus');
+  const fetchStreams = async () => {
     try {
-      console.log('Checking status for streams:', streamsList.map(s => ({
+      console.log('Fetching streams...');
+      const getActiveStreams = httpsCallable(functions, 'getActiveStreams');
+      const result = await getActiveStreams();
+      const data = result.data as { streams: Stream[] };
+      console.log('Got streams:', data.streams.length);
+      console.log('Stream details:', data.streams.map(s => ({
+        uid: s.uid,
         id: s.id,
-        streamerName: s.streamerName,
-        status: s.status
-      })));
-
-      const updatedStreams = await Promise.all(
-        streamsList.map(async (stream) => {
-          try {
-            const result = await checkStreamStatus({ streamId: stream.id });
-            const status = result.data.status;
-            const playback = result.data.playback;
-            
-            console.log('Stream status check result:', {
-              streamId: stream.id,
-              streamerName: stream.streamerName,
-              status,
-              currentStatus: stream.status,
-              hasPlayback: !!playback,
-              lastActive: stream.lastActive
-            });
-
-            // If Cloudflare reports the stream as live
-            if (status === 'live') {
-              return {
-                ...stream,
-                status: 'live',
-                statusMessage: 'Stream is live',
-                lastChecked: now,
-                lastActive: now,
-                playback: playback || stream.playback
-              };
-            }
-
-            // If stream was recently active but Cloudflare says not live,
-            // keep it for a short grace period
-            const wasRecentlyActive = stream.lastActive && (now - stream.lastActive) < 15000;
-            if (stream.status === 'live' && wasRecentlyActive) {
-              return {
-                ...stream,
-                lastChecked: now
-              };
-            }
-
-            // Otherwise, mark as offline
-            return {
-              ...stream,
-              status: 'offline',
-              statusMessage: 'Stream is offline',
-              lastChecked: now
-            };
-          } catch (error) {
-            console.error('Error checking stream status:', stream.id, error);
-            // On error, preserve the stream state if it was recently active
-            const wasRecentlyActive = stream.lastActive && (now - stream.lastActive) < 15000;
-            if (stream.status === 'live' && wasRecentlyActive) {
-              return {
-                ...stream,
-                lastChecked: now
-              };
-            }
-            return {
-              ...stream,
-              status: 'offline',
-              statusMessage: 'Error checking stream status',
-              lastChecked: now
-            };
-          }
-        })
-      );
-
-      // Keep only streams that are live or were recently active
-      const validStreams = updatedStreams
-        .filter((stream): stream is Stream => {
-          const wasRecentlyActive = stream.lastActive && (now - stream.lastActive) < 15000;
-          return stream.status === 'live' || wasRecentlyActive;
-        })
-        .sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
-      
-      console.log('Valid streams after status check:', validStreams.map(s => ({
-        id: s.id,
-        streamerName: s.streamerName,
         status: s.status,
-        lastActive: s.lastActive
+        displayName: s.displayName || s.email
       })));
-      
-      setStreams(validStreams);
-    } catch (error) {
-      console.error('Error updating stream statuses:', error);
-      setError('Unable to update stream statuses. Please try again.');
+      setStreams(data.streams);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching streams:', err);
+      setError('Unable to load streams. Please try again.');
     } finally {
-      setIsChecking(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    const streamsRef = ref(database, 'streams');
-    let isSubscribed = true;
+    console.log('StreamView mounted');
+    
+    // Initial fetch
+    fetchStreams();
 
-    const unsubscribe = onValue(streamsRef, async (snapshot) => {
-      if (!isSubscribed) return;
-
-      const data = snapshot.val();
-      if (data) {
-        console.log('Raw streams data:', Object.entries(data).map(([id, stream]: [string, any]) => ({
-          id,
-          streamerName: stream.streamerName,
-          status: stream.status
-        })));
-
-        const streamsList = Object.entries(data)
-          .map(([id, stream]: [string, any]) => ({
-            id,
-            title: stream.title || 'Untitled Stream',
-            streamerName: stream.streamerName || 'Anonymous',
-            thumbnailUrl: stream.thumbnailUrl || '',
-            viewerCount: stream.viewerCount || 0,
-            status: stream.status || 'offline',
-            statusMessage: stream.statusMessage || '',
-            lastActive: stream.lastActive,
-            startedAt: stream.startedAt,
-            playback: stream.playback,
-            ...stream,
-          }))
-          // Show streams that are live or were recently active
-          .filter(stream => {
-            const wasRecentlyActive = stream.lastActive && (Date.now() - stream.lastActive) < 15000;
-            return stream.status === 'live' || wasRecentlyActive;
-          })
-          // Sort by most recently active
-          .sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
-
-        console.log('Filtered streams list:', streamsList.map(s => ({
-          id: s.id,
-          streamerName: s.streamerName,
-          status: s.status,
-          lastActive: s.lastActive
-        })));
-
-        if (streamsList.length > 0) {
-          setStreams(streamsList);
-          checkStreamStatuses(streamsList);
-        } else {
-          setStreams([]);
-        }
-      } else {
-        setStreams([]);
-      }
-    });
-
-    // Set up periodic status checks
-    const interval = setInterval(() => {
-      if (streams.length > 0) {
-        checkStreamStatuses(streams);
-      }
-    }, 5000); // Check every 5 seconds
+    // Set up periodic refresh
+    refreshInterval.current = setInterval(fetchStreams, 10000);
 
     return () => {
-      isSubscribed = false;
-      unsubscribe();
-      clearInterval(interval);
+      console.log('StreamView unmounting');
+      if (refreshInterval.current) {
+        clearInterval(refreshInterval.current);
+      }
     };
   }, []);
 
-  const handleStreamPress = (streamId: string) => {
-    router.push(`/stream/${streamId}`);
+  const handleStreamPress = (id: string) => {
+    router.push(`/stream/${id}`);
   };
 
-  const getStreamStatus = (stream: Stream) => {
-    // Only use the status field from Cloudflare
-    return stream.status === 'live' ? 'live' : 'offline';
-  };
+  if (isLoading) {
+    return (
+      <ScrollView style={styles.container}>
+        <Text style={styles.header}>Live Streams</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>Loading streams...</Text>
+        </View>
+      </ScrollView>
+    );
+  }
 
-  const getStatusColor = (status: string) => {
-    return status === 'live' ? '#ff0000' : '#666';
-  };
+  // Log all streams before filtering
+  console.log('All streams before filtering:', streams.map(s => ({
+    uid: s.uid,
+    status: s.status,
+    displayName: s.displayName || s.email
+  })));
 
-  const getStatusText = (status: string) => {
-    return status === 'live' ? 'LIVE' : 'OFFLINE';
-  };
+  const liveStreams = streams.filter(stream => {
+    console.log('Stream status check:', {
+      uid: stream.uid,
+      status: stream.status
+    });
+    return stream.status === 'live';
+  });
 
-  const getStatusMessage = (stream: Stream) => {
-    // Use the same logic as getStreamStatus for consistency
-    return stream.status === 'live' ? 'Stream is live' : 'Stream is offline';
-  };
+  console.log('Live streams after filtering:', liveStreams.length);
 
-  const isStreamInitializing = (stream: Stream) => {
-    const streamStartTime = stream.startedAt;
-    const now = Date.now();
-    // Consider a stream as "initializing" if it's less than 30 seconds old
-    return now - streamStartTime < 30000;
-  };
+  if (error) {
+    return (
+      <ScrollView style={styles.container}>
+        <Text style={styles.header}>Live Streams</Text>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={fetchStreams}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
 
-  if (streams.length === 0 && !error) {
+  if (liveStreams.length === 0) {
     return (
       <ScrollView style={styles.container}>
         <Text style={styles.header}>Live Streams</Text>
@@ -250,62 +130,31 @@ export default function StreamView() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>Live Streams</Text>
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => checkStreamStatuses(streams)}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      {streams.length === 0 && !error ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No active streams right now</Text>
-        </View>
-      ) : (
-        // Only show streams that are actually live
-        streams
-          .filter(stream => stream.status === 'live')
-          .map((stream) => {
-            const status = getStreamStatus(stream);
-            const statusMessage = getStatusMessage(stream);
-            return (
-              <TouchableOpacity 
-                key={stream.id} 
-                style={styles.streamCard}
-                onPress={() => handleStreamPress(stream.id)}
-              >
-                <Image
-                  source={{ uri: stream.thumbnailUrl }}
-                  style={styles.thumbnail}
-                />
-                <View style={styles.streamInfo}>
-                  <Text style={styles.title}>{stream.title}</Text>
-                  <Text style={styles.streamerName}>{stream.streamerName}</Text>
-                  <View style={styles.viewerCount}>
-                    <Text style={styles.viewerText}>
-                      {stream.viewerCount} viewers
-                    </Text>
-                    <View style={[
-                      styles.liveIndicator,
-                      { backgroundColor: getStatusColor(status) }
-                    ]}>
-                      <Text style={styles.liveText}>
-                        {getStatusText(status)}
-                      </Text>
-                    </View>
-                  </View>
-                  {statusMessage && (
-                    <Text style={styles.statusMessage}>{statusMessage}</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })
-      )}
+      {liveStreams.map((stream) => (
+        <TouchableOpacity 
+          key={stream.uid} 
+          style={styles.streamCard}
+          onPress={() => handleStreamPress(stream.id)}
+        >
+          <Image
+            source={{ uri: stream.thumbnailUrl || 'https://placehold.co/400x200' }}
+            style={styles.thumbnail}
+          />
+          <View style={styles.streamInfo}>
+            <Text style={styles.title}>{stream.title || 'Untitled Stream'}</Text>
+            <Text style={styles.streamerName}>{stream.displayName || stream.email || 'Anonymous'}</Text>
+            <View style={styles.viewerCount}>
+              <Text style={styles.viewerText}>
+                {stream.viewerCount} viewers
+              </Text>
+              <View style={styles.liveIndicator}>
+                <Text style={styles.liveText}>LIVE</Text>
+              </View>
+            </View>
+            <Text style={styles.statusMessage}>Stream is live</Text>
+          </View>
+        </TouchableOpacity>
+      ))}
     </ScrollView>
   );
 }

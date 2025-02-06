@@ -47,29 +47,28 @@ export default function Broadcaster() {
           return;
         }
 
-        // Get current stream state from database
-        const streamRef = ref(db, `streams/${userData.liveInputId}`);
-        const streamSnapshot = await get(streamRef);
-        const streamData = streamSnapshot.val();
-
+        // Check current status with Cloudflare
         const checkStreamStatusFn = httpsCallable(functions, 'checkStreamStatus');
-        const result = await checkStreamStatusFn({ streamId: userData.liveInputId });
-        const isLive = (result.data as any).isLive;
+        const result = await checkStreamStatusFn({ 
+          streamId: userData.liveInputId,
+          liveInputId: userData.liveInputId 
+        });
         const status = (result.data as any).status;
-
+        
         console.log('Stream status check result:', {
           streamId: userData.liveInputId,
           status,
-          isLive,
-          dbStatus: streamData?.status,
-          dbIsLive: streamData?.isLive
+          streamData: userData
         });
 
-        // Consider stream live only if:
-        // 1. API reports isLive as true AND
-        // 2. Database has the stream marked as live
-        const isStreamLive = isLive && streamData?.isLive;
-        setStreamStatus(isStreamLive ? 'live' : 'offline');
+        // Stream is live if Cloudflare reports it as live
+        if (status === 'live') {
+          console.log('Stream is live');
+          setStreamStatus('live');
+        } else {
+          console.log('Stream is not live');
+          setStreamStatus('offline');
+        }
       } catch (error) {
         console.error('Error checking stream status:', error);
         setStreamStatus('offline');

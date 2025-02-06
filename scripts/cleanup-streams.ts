@@ -32,8 +32,10 @@ async function cleanupStreams() {
       snapshot.forEach((childSnapshot) => {
         updates[`streams/${childSnapshot.key}`] = {
           ...childSnapshot.val(),
-          isLive: false,
-          endedAt: Date.now()
+          status: 'offline',
+          statusMessage: 'Stream has ended',
+          endedAt: Date.now(),
+          updatedAt: Date.now()
         };
       });
       
