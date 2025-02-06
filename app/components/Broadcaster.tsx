@@ -1,4 +1,5 @@
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { get, getDatabase, ref } from 'firebase/database';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import { Alert, Clipboard, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -25,7 +26,7 @@ export default function Broadcaster() {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [streamKey, setStreamKey] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [streamStatus, setStreamStatus] = useState<'offline' | 'live' | 'connecting' | 'error'>('offline');
+  const [streamStatus, setStreamStatus] = useState<'offline' | 'live'>('offline');
   const functions = getFunctions();
 
   // Check stream status periodically
@@ -34,14 +35,44 @@ export default function Broadcaster() {
 
     const checkStatus = async () => {
       try {
+        // Get the user's stream ID from the database first
+        const db = getDatabase();
+        const userRef = ref(db, `users/${auth.currentUser?.uid}`);
+        const snapshot = await get(userRef);
+        const userData = snapshot.val();
+        
+        if (!userData?.liveInputId) {
+          console.log('No stream ID found for user');
+          setStreamStatus('offline');
+          return;
+        }
+
+        // Get current stream state from database
+        const streamRef = ref(db, `streams/${userData.liveInputId}`);
+        const streamSnapshot = await get(streamRef);
+        const streamData = streamSnapshot.val();
+
         const checkStreamStatusFn = httpsCallable(functions, 'checkStreamStatus');
-        const result = await checkStreamStatusFn();
+        const result = await checkStreamStatusFn({ streamId: userData.liveInputId });
+        const isLive = (result.data as any).isLive;
         const status = (result.data as any).status;
-        setStreamStatus(status);
-        console.log('Stream status:', status);
+
+        console.log('Stream status check result:', {
+          streamId: userData.liveInputId,
+          status,
+          isLive,
+          dbStatus: streamData?.status,
+          dbIsLive: streamData?.isLive
+        });
+
+        // Consider stream live only if:
+        // 1. API reports isLive as true AND
+        // 2. Database has the stream marked as live
+        const isStreamLive = isLive && streamData?.isLive;
+        setStreamStatus(isStreamLive ? 'live' : 'offline');
       } catch (error) {
         console.error('Error checking stream status:', error);
-        setStreamStatus('error');
+        setStreamStatus('offline');
       }
     };
 
@@ -347,14 +378,6 @@ const styles = StyleSheet.create({
   },
   status_live: {
     backgroundColor: '#4CAF50',
-    color: '#fff',
-  },
-  status_connecting: {
-    backgroundColor: '#FFC107',
-    color: '#000',
-  },
-  status_error: {
-    backgroundColor: '#f44336',
     color: '#fff',
   },
 }); 

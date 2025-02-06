@@ -76,6 +76,23 @@ exports.initializeUser = (0, https_1.onCall)(functionConfig, async (request) => 
                             updatedAt: Date.now()
                         });
                     }
+                    // Ensure stream entry exists
+                    const streamRef = db.ref(`streams/${snapshot.val().liveInputId}`);
+                    await streamRef.update({
+                        id: snapshot.val().liveInputId,
+                        liveInputId: snapshot.val().liveInputId,
+                        userId: auth.uid,
+                        title: data.result.meta?.name || `${auth.token.email}'s Stream`,
+                        streamerName: auth.token.email || 'Anonymous',
+                        isLive: false,
+                        status: 'offline',
+                        viewerCount: 0,
+                        playback: {
+                            hls: `https://customer-36l16wkxbq7p6vgy.cloudflarestream.com/${snapshot.val().liveInputId}/manifest/video.m3u8`,
+                            dash: `https://customer-36l16wkxbq7p6vgy.cloudflarestream.com/${snapshot.val().liveInputId}/manifest/video.mpd`
+                        },
+                        updatedAt: Date.now()
+                    });
                     return { success: true };
                 }
             }
@@ -93,7 +110,7 @@ exports.initializeUser = (0, https_1.onCall)(functionConfig, async (request) => 
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                meta: { name: `User Stream - ${auth.uid}` },
+                meta: { name: `${auth.token.email}'s Stream` },
                 recording: { mode: "automatic" }
             })
         });
@@ -103,21 +120,38 @@ exports.initializeUser = (0, https_1.onCall)(functionConfig, async (request) => 
             console.error('Failed to create live input:', data.errors);
             throw new Error('Failed to create permanent live input');
         }
+        const liveInputId = data.result.uid;
+        const streamKey = data.result.rtmps.streamKey;
         // Save user data with stream information from Cloudflare
         const userData = {
-            streamKey: data.result.rtmps.streamKey,
-            liveInputId: data.result.uid,
+            streamKey,
+            liveInputId,
             rtmps: {
                 url: 'rtmps://live.cloudflare.com:443/live'
             },
             playback: {
-                hls: `https://customer-36l16wkxbq7p6vgy.cloudflarestream.com/${data.result.uid}/manifest/video.m3u8`,
-                dash: `https://customer-36l16wkxbq7p6vgy.cloudflarestream.com/${data.result.uid}/manifest/video.mpd`
+                hls: `https://customer-36l16wkxbq7p6vgy.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`,
+                dash: `https://customer-36l16wkxbq7p6vgy.cloudflarestream.com/${liveInputId}/manifest/video.mpd`
             },
             createdAt: Date.now()
         };
         console.log('Saving user data:', userData);
         await userRef.set(userData);
+        // Create initial stream entry
+        const streamRef = db.ref(`streams/${liveInputId}`);
+        await streamRef.set({
+            id: liveInputId,
+            liveInputId,
+            userId: auth.uid,
+            title: `${auth.token.email}'s Stream`,
+            streamerName: auth.token.email || 'Anonymous',
+            isLive: false,
+            status: 'offline',
+            viewerCount: 0,
+            playback: userData.playback,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+        });
         return { success: true };
     }
     catch (error) {
@@ -240,122 +274,235 @@ exports.cleanupStaleStreams = (0, scheduler_1.onSchedule)('every 5 minutes', asy
 });
 exports.checkStreamStatus = (0, https_1.onCall)(functionConfig, async (request) => {
     try {
-        const auth = request.auth;
-        if (!auth?.uid) {
-            throw new Error('Authentication required');
+        const streamId = request.data?.streamId;
+        if (!streamId) {
+            console.error('No streamId provided');
+            return { status: 'error', message: 'Stream ID is required', isLive: false };
         }
-        console.log('Checking stream status for user:', auth.uid);
-        // Get user data first
-        const db = (0, database_1.getDatabase)();
-        const userRef = db.ref(`users/${auth.uid}`);
-        const userSnapshot = await userRef.get();
-        if (!userSnapshot.exists()) {
-            console.error('User data not found for:', auth.uid);
-            throw new Error('User not found');
-        }
-        const userData = userSnapshot.val();
-        if (!userData.liveInputId) {
-            console.error('No live input ID found for user:', auth.uid);
-            throw new Error('No live input found');
-        }
-        console.log('Found user data:', {
-            userId: auth.uid,
-            liveInputId: userData.liveInputId,
-            streamKey: userData.streamKey ? '***' : 'missing'
-        });
+        console.log('Checking stream status for stream:', streamId);
+        let streamData = null;
         try {
+            // Get stream data from database
+            const db = (0, database_1.getDatabase)();
+            const streamRef = db.ref(`streams/${streamId}`);
+            const streamSnapshot = await streamRef.get();
+            if (!streamSnapshot.exists()) {
+                console.log('Stream not found:', streamId);
+                return { status: 'ended', message: 'Stream not found', isLive: false };
+            }
+            streamData = streamSnapshot.val();
+            const liveInputId = streamData?.liveInputId || streamId;
+            // If stream is initializing, keep it in starting state
+            const streamAge = Date.now() - (streamData.startedAt || streamData.createdAt || Date.now());
+            if (streamAge < 30000 && streamData.isLive) {
+                return {
+                    status: 'starting',
+                    message: 'Stream is starting...',
+                    isLive: true
+                };
+            }
+            // If stream was recently active, keep it in connecting state
+            const lastActive = streamData.lastActive || streamData.updatedAt || streamData.startedAt || streamData.createdAt;
+            if (lastActive && Date.now() - lastActive < 30000 && streamData.isLive) {
+                return {
+                    status: 'connecting',
+                    message: 'Checking stream connection...',
+                    isLive: true
+                };
+            }
             // Check stream status with Cloudflare
-            console.log('Checking Cloudflare status for live input:', userData.liveInputId);
-            const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${userData.liveInputId}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${cloudflareApiToken.value()}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-            const data = await response.json();
+            console.log('Checking Cloudflare status for live input:', liveInputId);
+            let response;
+            try {
+                response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${cloudflareApiToken.value()}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+            }
+            catch (fetchError) {
+                console.error('Network error checking stream status:', fetchError);
+                // If the stream was previously live or is initializing, keep it in connecting state
+                if (streamData?.isLive || streamAge < 30000) {
+                    return {
+                        status: 'connecting',
+                        message: 'Checking stream connection...',
+                        isLive: true
+                    };
+                }
+                return {
+                    status: 'error',
+                    message: 'Network error checking stream status',
+                    isLive: false
+                };
+            }
+            if (!response.ok) {
+                console.error('Cloudflare API error:', response.status, response.statusText);
+                // If the stream was previously live or is initializing, mark as connecting
+                if (streamData?.isLive || streamAge < 30000) {
+                    return {
+                        status: 'connecting',
+                        message: 'Checking stream connection...',
+                        isLive: true
+                    };
+                }
+                return {
+                    status: 'error',
+                    message: `API error: ${response.status} ${response.statusText}`,
+                    isLive: false
+                };
+            }
+            let data;
+            try {
+                data = await response.json();
+            }
+            catch (jsonError) {
+                console.error('Error parsing Cloudflare response:', jsonError);
+                if (streamData?.isLive || streamAge < 30000) {
+                    return {
+                        status: 'connecting',
+                        message: 'Checking stream status...',
+                        isLive: true
+                    };
+                }
+                return {
+                    status: 'error',
+                    message: 'Error reading stream status',
+                    isLive: false
+                };
+            }
             console.log('Cloudflare stream status response:', JSON.stringify(data, null, 2));
             if (!data.success || !data.result) {
-                console.error('Failed to get stream status from Cloudflare:', data.errors || 'Unknown error');
-                return { status: 'error', message: 'Failed to get stream status' };
+                console.log('Stream not active in Cloudflare:', data.errors || 'Unknown error');
+                // If the stream was previously live or is initializing, give it some time to reconnect
+                if (streamData?.isLive || streamAge < 30000) {
+                    const disconnectionTime = Date.now() - (lastActive || Date.now());
+                    if (disconnectionTime < 30000) { // Less than 30 seconds
+                        return {
+                            status: 'connecting',
+                            message: 'Stream reconnecting...',
+                            isLive: true
+                        };
+                    }
+                }
+                // Mark stream as ended in database
+                await streamRef.update({
+                    isLive: false,
+                    status: 'ended',
+                    endedAt: Date.now(),
+                    lastActive: Date.now()
+                });
+                return {
+                    status: 'ended',
+                    message: data.errors?.[0]?.message || 'Stream has ended',
+                    isLive: false
+                };
             }
-            // Get or create stream document in streams collection
-            const streamRef = db.ref(`streams/${userData.liveInputId}`);
-            const streamSnapshot = await streamRef.get();
-            const stream = streamSnapshot.val();
-            console.log('Current stream data:', stream || 'No existing stream data');
             // Check if the stream is actually receiving data
-            const isReceivingData = data.result.status?.current?.state === 'connected';
-            console.log('Stream receiving data:', isReceivingData);
+            const streamState = data.result.status?.current?.state;
+            const streamReason = data.result.status?.current?.reason;
+            const isReceivingData = streamState === 'connected';
+            console.log('Stream state:', streamState, 'reason:', streamReason, 'receiving data:', isReceivingData);
             if (isReceivingData) {
                 // Stream is live and receiving data
-                const streamData = {
-                    streamId: userData.liveInputId,
-                    userId: auth.uid,
-                    streamerName: auth.token.email || 'Anonymous',
+                const updatedStreamData = {
                     isLive: true,
                     status: 'live',
-                    viewerCount: stream?.viewerCount || 0,
-                    startedAt: stream?.startedAt || Date.now(),
                     lastActive: Date.now(),
-                    playback: userData.playback,
-                    meta: {
-                        name: data.result.meta?.name || `Stream - ${auth.uid}`
-                    }
+                    viewerCount: streamData.viewerCount || 0,
+                    updatedAt: Date.now()
                 };
-                if (!stream || !stream.isLive) {
-                    // Stream just started or was reconnected
-                    console.log('Stream starting or reconnecting:', streamData);
-                    await streamRef.set(streamData);
-                }
-                else {
-                    // Update last active timestamp
-                    console.log('Updating stream status:', streamData);
-                    await streamRef.update(streamData);
-                }
-                return { status: 'live' };
+                // Update stream status
+                await streamRef.update(updatedStreamData);
+                return {
+                    status: 'live',
+                    message: 'Stream is live',
+                    isLive: true
+                };
             }
             else {
-                // Stream is not receiving data
-                if (stream && stream.isLive) {
+                // Stream exists but not receiving data
+                if (streamData?.isLive || streamAge < 30000) {
                     // Check if this is a temporary disconnection
-                    const lastActive = stream.lastActive || stream.startedAt;
-                    const disconnectionTime = Date.now() - lastActive;
+                    const disconnectionTime = Date.now() - (lastActive || Date.now());
                     console.log('Stream disconnection time:', disconnectionTime);
                     if (disconnectionTime < 30000) { // Less than 30 seconds
                         // Temporary disconnection, keep stream marked as live
-                        console.log('Temporary disconnection detected:', userData.liveInputId);
-                        return { status: 'connecting' };
+                        console.log('Temporary disconnection detected:', streamId);
+                        return {
+                            status: 'connecting',
+                            message: streamReason ? `Reconnecting: ${streamReason}` : 'Stream reconnecting...',
+                            isLive: true
+                        };
                     }
                     else {
                         // Stream has been disconnected for too long, mark as ended
-                        console.log('Stream ended due to inactivity:', userData.liveInputId);
+                        console.log('Stream ended due to inactivity:', streamId);
                         const endedData = {
                             isLive: false,
                             status: 'ended',
-                            endedAt: Date.now()
+                            endedAt: Date.now(),
+                            lastActive: Date.now(),
+                            updatedAt: Date.now()
                         };
                         await streamRef.update(endedData);
-                        console.log('Updated stream status to ended:', endedData);
+                        return {
+                            status: 'ended',
+                            message: 'Stream ended due to inactivity',
+                            isLive: false
+                        };
                     }
                 }
-                else if (!stream) {
-                    console.log('No stream data found for:', userData.liveInputId);
+                // If stream exists but is not live, check if it's starting up
+                if (streamState === 'ready' || streamAge < 30000) {
+                    return {
+                        status: 'starting',
+                        message: 'Stream is starting...',
+                        isLive: true
+                    };
                 }
-                else {
-                    console.log('Stream already marked as not live:', userData.liveInputId);
+                // If we have a specific reason from Cloudflare, use it
+                if (streamReason) {
+                    return {
+                        status: 'error',
+                        message: `Stream error: ${streamReason}`,
+                        isLive: false
+                    };
                 }
-                return { status: 'ended' };
+                return {
+                    status: 'ended',
+                    message: 'Stream not active',
+                    isLive: false
+                };
             }
         }
         catch (error) {
-            console.error('Error checking Cloudflare status:', error);
-            return { status: 'error', message: error instanceof Error ? error.message : 'Unknown error' };
+            console.error('Error checking stream status:', error);
+            // If there was an error but the stream was previously live or is initializing, don't end it immediately
+            const streamAge = Date.now() - (streamData?.startedAt || streamData?.createdAt || Date.now());
+            if (streamData?.isLive || streamAge < 30000) {
+                return {
+                    status: 'connecting',
+                    message: 'Checking stream connection...',
+                    isLive: true
+                };
+            }
+            return {
+                status: 'error',
+                message: error instanceof Error ? error.message : 'Failed to check stream status',
+                isLive: false
+            };
         }
     }
     catch (error) {
         console.error('Error in checkStreamStatus:', error);
-        throw new Error(error instanceof Error ? error.message : 'Failed to check stream status');
+        return {
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Internal error checking stream status',
+            isLive: false
+        };
     }
 });
 // Send chat message function
