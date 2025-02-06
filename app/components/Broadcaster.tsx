@@ -1,5 +1,4 @@
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { get, getDatabase, ref } from 'firebase/database';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import { Alert, Clipboard, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -26,63 +25,7 @@ export default function Broadcaster() {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [streamKey, setStreamKey] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [streamStatus, setStreamStatus] = useState<'offline' | 'live'>('offline');
   const functions = getFunctions();
-
-  // Check stream status periodically
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const checkStatus = async () => {
-      try {
-        // Get the user's stream ID from the database first
-        const db = getDatabase();
-        const userRef = ref(db, `users/${auth.currentUser?.uid}`);
-        const snapshot = await get(userRef);
-        const userData = snapshot.val();
-        
-        if (!userData?.liveInputId) {
-          console.log('No stream ID found for user');
-          setStreamStatus('offline');
-          return;
-        }
-
-        // Check current status with Cloudflare
-        const checkStreamStatusFn = httpsCallable(functions, 'checkStreamStatus');
-        const result = await checkStreamStatusFn({ 
-          streamId: userData.liveInputId,
-          liveInputId: userData.liveInputId 
-        });
-        const status = (result.data as any).status;
-        
-        console.log('Stream status check result:', {
-          streamId: userData.liveInputId,
-          status,
-          streamData: userData
-        });
-
-        // Stream is live if Cloudflare reports it as live
-        if (status === 'live') {
-          console.log('Stream is live');
-          setStreamStatus('live');
-        } else {
-          console.log('Stream is not live');
-          setStreamStatus('offline');
-        }
-      } catch (error) {
-        console.error('Error checking stream status:', error);
-        setStreamStatus('offline');
-      }
-    };
-
-    // Check immediately
-    checkStatus();
-
-    // Then check every 5 seconds
-    const interval = setInterval(checkStatus, 5000);
-
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -101,7 +44,6 @@ export default function Broadcaster() {
         }
       } else {
         setStreamKey(null);
-        setStreamStatus('offline');
       }
     });
 
@@ -189,13 +131,6 @@ export default function Broadcaster() {
                 </>
               )}
             </View>
-          </View>
-
-          <View style={styles.statusContainer}>
-            <Text style={styles.label}>Stream Status:</Text>
-            <Text style={[styles.status, styles[`status_${streamStatus}`]]}>
-              {streamStatus.toUpperCase()}
-            </Text>
           </View>
 
           <Text style={styles.instructions}>
@@ -352,31 +287,5 @@ const styles = StyleSheet.create({
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
       },
     }),
-  },
-  statusContainer: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      },
-    }),
-  },
-  status: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    paddingVertical: 8,
-    borderRadius: 4,
-  },
-  status_offline: {
-    backgroundColor: '#f0f0f0',
-    color: '#666',
-  },
-  status_live: {
-    backgroundColor: '#4CAF50',
-    color: '#fff',
   },
 }); 
