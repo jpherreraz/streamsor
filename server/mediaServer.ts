@@ -83,5 +83,6 @@ async function deleteLiveInput(uid: string): Promise<void> {
 }
 
 export {
-  createLiveInput, deleteLiveInput, getLiveInputStatus
+    createLiveInput, deleteLiveInput, getLiveInputStatus
 };
+

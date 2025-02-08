@@ -17,6 +17,7 @@ interface Stream {
     hls: string;
     dash: string;
   };
+  photoURL?: string;
 }
 
 export default function StreamView() {
@@ -130,31 +131,55 @@ export default function StreamView() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>Live Streams</Text>
-      {liveStreams.map((stream) => (
-        <TouchableOpacity 
-          key={stream.uid} 
-          style={styles.streamCard}
-          onPress={() => handleStreamPress(stream.id)}
-        >
-          <Image
-            source={{ uri: stream.thumbnailUrl || 'https://placehold.co/400x200' }}
-            style={styles.thumbnail}
-          />
-          <View style={styles.streamInfo}>
-            <Text style={styles.title}>{stream.title || 'Untitled Stream'}</Text>
-            <Text style={styles.streamerName}>{stream.displayName || stream.email || 'Anonymous'}</Text>
-            <View style={styles.viewerCount}>
-              <Text style={styles.viewerText}>
-                {stream.viewerCount} viewers
-              </Text>
-              <View style={styles.liveIndicator}>
-                <Text style={styles.liveText}>LIVE</Text>
+      <View style={styles.listContainer}>
+        {liveStreams.map((stream) => (
+          <TouchableOpacity 
+            key={stream.uid} 
+            style={styles.videoCard}
+            onPress={() => handleStreamPress(stream.id)}
+          >
+            <Image
+              source={{ 
+                uri: `https://videodelivery.net/${stream.liveInputId}/thumbnails/thumbnail.jpg?height=270` 
+              }}
+              style={styles.thumbnail}
+              resizeMode="cover"
+            />
+            <View style={styles.videoInfo}>
+              <View style={styles.infoContainer}>
+                {stream.photoURL ? (
+                  <Image 
+                    source={{ uri: stream.photoURL }} 
+                    style={styles.uploaderAvatar} 
+                  />
+                ) : (
+                  <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
+                    <Text style={styles.uploaderAvatarText}>
+                      {(stream.displayName || stream.email || 'A')?.[0]?.toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.textContent}>
+                  <Text style={styles.title} numberOfLines={2}>
+                    {stream.title || 'Untitled Stream'}
+                  </Text>
+                  <Text style={styles.uploaderEmail} numberOfLines={1}>
+                    {stream.displayName || stream.email || 'Anonymous'}
+                  </Text>
+                  <View style={styles.viewerCount}>
+                    <Text style={styles.viewerText}>
+                      {stream.viewerCount} viewers
+                    </Text>
+                    <View style={styles.liveIndicator}>
+                      <Text style={styles.liveText}>LIVE</Text>
+                    </View>
+                  </View>
+                </View>
               </View>
             </View>
-            <Text style={styles.statusMessage}>Stream is live</Text>
-          </View>
-        </TouchableOpacity>
-      ))}
+          </TouchableOpacity>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -169,70 +194,105 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     padding: 16,
   },
-  streamCard: {
-    backgroundColor: 'white',
-    marginHorizontal: 16,
-    marginBottom: 16,
+  listContainer: {
+    padding: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  videoCard: {
+    backgroundColor: '#fff',
     borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
     overflow: 'hidden',
-    elevation: 2,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+    width: 320,
+    marginBottom: 8,
   },
   thumbnail: {
     width: '100%',
-    height: 200,
+    aspectRatio: 16/9,
+    backgroundColor: '#f0f0f0',
   },
-  streamInfo: {
-    padding: 12,
+  videoInfo: {
+    padding: 8,
+    backgroundColor: '#fff',
+  },
+  infoContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  textContent: {
+    flex: 1,
+    marginLeft: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '600',
     marginBottom: 4,
+    color: '#1a1a1a',
   },
-  streamerName: {
+  uploaderAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  uploaderAvatarPlaceholder: {
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploaderAvatarText: {
     fontSize: 14,
+    fontWeight: '600',
     color: '#666',
-    marginBottom: 8,
+  },
+  uploaderEmail: {
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 2,
   },
   viewerCount: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   viewerText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666',
-    marginRight: 8,
   },
   liveIndicator: {
     backgroundColor: '#ff0000',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   liveText: {
-    color: 'white',
-    fontSize: 12,
+    color: '#fff',
+    fontSize: 10,
     fontWeight: '600',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   emptyStateText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
     color: '#666',
-  },
-  initializingIndicator: {
-    backgroundColor: '#FFA500',
+    textAlign: 'center',
   },
   errorContainer: {
     padding: 16,
     backgroundColor: '#ffebee',
-    marginHorizontal: 16,
-    marginBottom: 16,
+    margin: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -247,13 +307,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   retryButtonText: {
-    color: 'white',
+    color: '#fff',
     fontWeight: 'bold',
-  },
-  statusMessage: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-    fontStyle: 'italic'
   },
 }); 

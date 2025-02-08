@@ -1,16 +1,52 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getActiveStreams = exports.syncPublicUserData = exports.stopStream = exports.startStream = exports.sendChatMessage = exports.checkStreamStatus = exports.cleanupStaleStreams = exports.getStreamKey = exports.regenerateStreamKey = exports.initializeUser = void 0;
+exports.updateStreamTitle = exports.getCloudflareVideos = exports.cleanupOldProfilePicture = exports.optimizeBanner = exports.optimizeProfileImage = exports.getActiveStreams = exports.syncPublicUserData = exports.stopStream = exports.startStream = exports.sendChatMessage = exports.checkStreamStatus = exports.cleanupStaleStreams = exports.getStreamKey = exports.regenerateStreamKey = exports.initializeUser = void 0;
 const crypto_1 = __importDefault(require("crypto"));
+const admin = __importStar(require("firebase-admin"));
 const app_1 = require("firebase-admin/app");
 const database_1 = require("firebase-admin/database");
 const params_1 = require("firebase-functions/params");
+const v2_1 = require("firebase-functions/v2");
 const database_2 = require("firebase-functions/v2/database");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
+const sharp_1 = __importDefault(require("sharp"));
 // Initialize Firebase Admin
 (0, app_1.initializeApp)();
 const cloudflareAccountId = (0, params_1.defineSecret)('CLOUDFLARE_ACCOUNT_ID');
@@ -66,8 +102,13 @@ const functionConfig = {
     cors: [
         'http://localhost:8081',
         'http://localhost:19006',
+        'http://localhost:19000',
+        'http://localhost:19001',
+        'http://localhost:19002',
         'https://streamsor-6fb0e.web.app',
-        'https://streamsor-6fb0e.firebaseapp.com'
+        'https://streamsor-6fb0e.firebaseapp.com',
+        'capacitor://localhost',
+        'ionic://localhost'
     ],
     maxInstances: 10,
     region: 'us-central1',
@@ -662,6 +703,7 @@ exports.getActiveStreams = (0, https_1.onCall)({
             title: userData.title,
             viewerCount: userData.viewerCount || 0,
             thumbnailUrl: userData.thumbnailUrl,
+            photoURL: userData.photoURL,
             playback: userData.playback
         }));
         console.log('Found streamers with liveInputId:', streamers.length);
@@ -773,6 +815,236 @@ exports.getActiveStreams = (0, https_1.onCall)({
     catch (error) {
         console.error('Error getting active streams:', error);
         throw new Error('Failed to get active streams');
+    }
+});
+// Optimize and resize profile pictures on upload
+exports.optimizeProfileImage = v2_1.storage.onObjectFinalized(async (event) => {
+    const filePath = event.data.name;
+    if (!filePath)
+        return;
+    // Only process profile pictures
+    if (!filePath.startsWith('profile_pictures/'))
+        return;
+    const bucket = admin.storage().bucket(event.data.bucket);
+    const file = bucket.file(filePath);
+    // Download file
+    const [buffer] = await file.download();
+    // Optimize and resize image
+    const optimizedBuffer = await (0, sharp_1.default)(buffer)
+        .resize(500, 500, {
+        fit: 'cover',
+        position: 'center'
+    })
+        .jpeg({
+        quality: 85,
+        progressive: true
+    })
+        .toBuffer();
+    // Upload optimized image back
+    await file.save(optimizedBuffer, {
+        metadata: {
+            contentType: 'image/jpeg',
+            metadata: {
+                optimized: 'true'
+            }
+        }
+    });
+    console.log(`Optimized profile picture: ${filePath}`);
+});
+// Optimize and resize banners on upload
+exports.optimizeBanner = v2_1.storage.onObjectFinalized(async (event) => {
+    const filePath = event.data.name;
+    if (!filePath)
+        return;
+    // Only process banners
+    if (!filePath.startsWith('profile_banners/'))
+        return;
+    const bucket = admin.storage().bucket(event.data.bucket);
+    const file = bucket.file(filePath);
+    // Download file
+    const [buffer] = await file.download();
+    // Optimize and resize image
+    const optimizedBuffer = await (0, sharp_1.default)(buffer)
+        .resize(1920, 1080, {
+        fit: 'cover',
+        position: 'center'
+    })
+        .jpeg({
+        quality: 85,
+        progressive: true
+    })
+        .toBuffer();
+    // Upload optimized image back
+    await file.save(optimizedBuffer, {
+        metadata: {
+            contentType: 'image/jpeg',
+            metadata: {
+                optimized: 'true'
+            }
+        }
+    });
+    console.log(`Optimized banner: ${filePath}`);
+});
+// Clean up old profile pictures when deleted
+exports.cleanupOldProfilePicture = v2_1.storage.onObjectDeleted(async (event) => {
+    const filePath = event.data.name;
+    if (!filePath)
+        return;
+    // Only handle profile pictures
+    if (!filePath.startsWith('profile_pictures/'))
+        return;
+    const userId = filePath.split('/')[1];
+    if (!userId)
+        return;
+    // Update user profile to remove photo URL
+    try {
+        const user = await admin.auth().getUser(userId);
+        if (user.photoURL && user.photoURL.includes(filePath)) {
+            await admin.auth().updateUser(userId, {
+                photoURL: null
+            });
+        }
+    }
+    catch (error) {
+        console.error(`Error updating user ${userId} profile:`, error);
+    }
+});
+exports.getCloudflareVideos = (0, https_1.onCall)(async (context) => {
+    try {
+        console.log('Fetching videos from Cloudflare with account:', process.env.CLOUDFLARE_ACCOUNT_ID);
+        const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/stream`, {
+            headers: {
+                'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Cloudflare API error:', {
+                status: response.status,
+                statusText: response.statusText,
+                errorData
+            });
+            throw new Error(`Failed to fetch videos: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log('Cloudflare API response:', {
+            success: data.success,
+            resultCount: data.result?.length || 0
+        });
+        if (!data.success) {
+            console.error('Cloudflare API returned success: false', data.errors);
+            throw new Error('Cloudflare API returned unsuccessful response');
+        }
+        if (!Array.isArray(data.result)) {
+            console.error('Unexpected response format:', data);
+            throw new Error('Unexpected response format from Cloudflare API');
+        }
+        // Get the database reference
+        const db = (0, database_1.getDatabase)();
+        // Process videos and fetch user data
+        const videos = await Promise.all(data.result.map(async (video) => {
+            // Get user data from the video's meta.uploadedBy field
+            const uploaderId = video.meta?.uploadedBy;
+            let uploaderData = null;
+            if (uploaderId) {
+                const userSnapshot = await db.ref(`users/${uploaderId}`).get();
+                uploaderData = userSnapshot.val();
+            }
+            return {
+                uid: video.uid,
+                title: video.meta?.name || 'Untitled Video',
+                thumbnail: video.thumbnail,
+                playbackUrl: video.playback?.hls,
+                createdAt: video.created,
+                uploader: {
+                    id: uploaderId,
+                    email: uploaderData?.email || 'Unknown User',
+                    photoURL: uploaderData?.photoURL || null
+                }
+            };
+        }));
+        console.log(`Successfully mapped ${videos.length} videos`);
+        return videos;
+    }
+    catch (error) {
+        console.error('Error in getCloudflareVideos:', error);
+        throw new Error('Failed to fetch videos');
+    }
+});
+// Update stream title and category
+exports.updateStreamTitle = (0, https_1.onCall)({
+    cors: true,
+    maxInstances: 10,
+    region: 'us-central1',
+    secrets: [cloudflareAccountId, cloudflareApiToken]
+}, async (request) => {
+    const auth = request.auth;
+    if (!auth?.uid) {
+        throw new Error('Authentication required');
+    }
+    const { title, category } = request.data;
+    if (!title || typeof title !== 'string') {
+        throw new Error('Valid title is required');
+    }
+    if (!category || !['gaming', 'just-chatting', 'art', 'software-dev'].includes(category)) {
+        throw new Error('Valid category is required');
+    }
+    const db = (0, database_1.getDatabase)();
+    const userRef = db.ref(`users/${auth.uid}`);
+    // Get user's live input ID
+    const userSnapshot = await userRef.get();
+    if (!userSnapshot.exists() || !userSnapshot.val().liveInputId) {
+        throw new Error('Stream setup not found');
+    }
+    const liveInputId = userSnapshot.val().liveInputId;
+    try {
+        // Get existing stream data first
+        const streamRef = db.ref(`streams/${liveInputId}`);
+        const streamSnapshot = await streamRef.get();
+        const existingStreamData = streamSnapshot.exists() ? streamSnapshot.val() : {};
+        // Update title in Cloudflare
+        const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${cloudflareApiToken.value()}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                meta: {
+                    name: title,
+                    category
+                }
+            })
+        });
+        const data = await response.json();
+        if (!data.success) {
+            console.error('Cloudflare update failed:', data.errors);
+            throw new Error('Failed to update stream info');
+        }
+        // Update title and category in both stream and user data
+        const updates = {};
+        // Preserve existing stream data while updating title and category
+        updates[`streams/${liveInputId}`] = {
+            ...existingStreamData,
+            title,
+            category,
+            updatedAt: Date.now()
+        };
+        // Update user data
+        updates[`users/${auth.uid}`] = {
+            ...userSnapshot.val(),
+            title,
+            category,
+            updatedAt: Date.now()
+        };
+        // Apply all updates atomically
+        await db.ref().update(updates);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error updating stream info:', error);
+        throw new Error('Failed to update stream info');
     }
 });
 //# sourceMappingURL=index.js.map

@@ -1,0 +1,1 @@
+export const DEFAULT_BANNER = 'https://placehold.co/1920x1080/007AFF/ffffff/png?text=Add+a+banner'; 

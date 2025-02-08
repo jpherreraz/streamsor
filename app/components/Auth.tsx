@@ -15,14 +15,15 @@ type EmailValidity = 'invalid' | 'valid' | null;
 
 interface AuthProps {
   onAuthSuccess?: () => void;
+  initialMode?: boolean; // true for login, false for signup
 }
 
-export default function Auth({ onAuthSuccess }: AuthProps) {
+export default function Auth({ onAuthSuccess, initialMode = true }: AuthProps) {
   const [email, setEmail] = useState('');
   const [emailValidity, setEmailValidity] = useState<EmailValidity>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(initialMode);
   const [loading, setLoading] = useState(false);
   const [passwordsMatch, setPasswordsMatch] = useState<boolean | null>(null);
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>(null);

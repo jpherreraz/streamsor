@@ -1,10 +1,15 @@
 import crypto from 'crypto';
+import * as admin from 'firebase-admin';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
+import * as functions from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
+import { storage } from 'firebase-functions/v2';
 import { onValueWritten } from 'firebase-functions/v2/database';
 import { HttpsOptions, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { StorageEvent } from 'firebase-functions/v2/storage';
+import sharp from 'sharp';
 
 // Initialize Firebase Admin
 initializeApp();
@@ -132,8 +137,13 @@ const functionConfig: HttpsOptions = {
   cors: [
     'http://localhost:8081',
     'http://localhost:19006',
+    'http://localhost:19000',
+    'http://localhost:19001',
+    'http://localhost:19002',
     'https://streamsor-6fb0e.web.app',
-    'https://streamsor-6fb0e.firebaseapp.com'
+    'https://streamsor-6fb0e.firebaseapp.com',
+    'capacitor://localhost',
+    'ionic://localhost'
   ],
   maxInstances: 10,
   region: 'us-central1',
@@ -826,6 +836,7 @@ export const getActiveStreams = onCall({
         title: userData.title,
         viewerCount: userData.viewerCount || 0,
         thumbnailUrl: userData.thumbnailUrl,
+        photoURL: userData.photoURL,
         playback: userData.playback
       }));
 
@@ -952,5 +963,330 @@ export const getActiveStreams = onCall({
   } catch (error) {
     console.error('Error getting active streams:', error);
     throw new Error('Failed to get active streams');
+  }
+});
+
+// Optimize and resize profile pictures on upload
+export const optimizeProfileImage = storage.onObjectFinalized(async (event: StorageEvent) => {
+  const filePath = event.data.name;
+  if (!filePath) return;
+
+  // Only process profile pictures
+  if (!filePath.startsWith('profile_pictures/')) return;
+
+  const bucket = admin.storage().bucket(event.data.bucket);
+  const file = bucket.file(filePath);
+
+  // Download file
+  const [buffer] = await file.download();
+
+  // Optimize and resize image
+  const optimizedBuffer = await sharp(buffer)
+    .resize(500, 500, {
+      fit: 'cover',
+      position: 'center'
+    })
+    .jpeg({
+      quality: 85,
+      progressive: true
+    })
+    .toBuffer();
+
+  // Upload optimized image back
+  await file.save(optimizedBuffer, {
+    metadata: {
+      contentType: 'image/jpeg',
+      metadata: {
+        optimized: 'true'
+      }
+    }
+  });
+
+  console.log(`Optimized profile picture: ${filePath}`);
+});
+
+// Optimize and resize banners on upload
+export const optimizeBanner = storage.onObjectFinalized(async (event: StorageEvent) => {
+  const filePath = event.data.name;
+  if (!filePath) return;
+
+  // Only process banners
+  if (!filePath.startsWith('profile_banners/')) return;
+
+  const bucket = admin.storage().bucket(event.data.bucket);
+  const file = bucket.file(filePath);
+
+  // Download file
+  const [buffer] = await file.download();
+
+  // Optimize and resize image
+  const optimizedBuffer = await sharp(buffer)
+    .resize(1920, 1080, {
+      fit: 'cover',
+      position: 'center'
+    })
+    .jpeg({
+      quality: 85,
+      progressive: true
+    })
+    .toBuffer();
+
+  // Upload optimized image back
+  await file.save(optimizedBuffer, {
+    metadata: {
+      contentType: 'image/jpeg',
+      metadata: {
+        optimized: 'true'
+      }
+    }
+  });
+
+  console.log(`Optimized banner: ${filePath}`);
+});
+
+// Clean up old profile pictures when deleted
+export const cleanupOldProfilePicture = storage.onObjectDeleted(async (event: StorageEvent) => {
+  const filePath = event.data.name;
+  if (!filePath) return;
+
+  // Only handle profile pictures
+  if (!filePath.startsWith('profile_pictures/')) return;
+
+  const userId = filePath.split('/')[1];
+  if (!userId) return;
+
+  // Update user profile to remove photo URL
+  try {
+    const user = await admin.auth().getUser(userId);
+    if (user.photoURL && user.photoURL.includes(filePath)) {
+      await admin.auth().updateUser(userId, {
+        photoURL: null
+      });
+    }
+  } catch (error) {
+    console.error(`Error updating user ${userId} profile:`, error);
+  }
+});
+
+export const getCloudflareVideos = onCall(async (context) => {
+  try {
+    console.log('Fetching videos from Cloudflare with account:', process.env.CLOUDFLARE_ACCOUNT_ID);
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/stream`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Cloudflare API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      });
+      throw new Error(`Failed to fetch videos: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('Cloudflare API response:', {
+      success: data.success,
+      resultCount: data.result?.length || 0
+    });
+    
+    if (!data.success) {
+      console.error('Cloudflare API returned success: false', data.errors);
+      throw new Error('Cloudflare API returned unsuccessful response');
+    }
+
+    if (!Array.isArray(data.result)) {
+      console.error('Unexpected response format:', data);
+      throw new Error('Unexpected response format from Cloudflare API');
+    }
+
+    // Get the database reference
+    const db = getDatabase();
+
+    // Process videos and fetch user data
+    const videos = await Promise.all(data.result.map(async (video: any) => {
+      // Get user data from the video's meta.uploadedBy field
+      const uploaderId = video.meta?.uploadedBy;
+      let uploaderData = null;
+      
+      if (uploaderId) {
+        const userSnapshot = await db.ref(`users/${uploaderId}`).get();
+        uploaderData = userSnapshot.val();
+      }
+
+      return {
+        uid: video.uid,
+        title: video.meta?.name || 'Untitled Video',
+        thumbnail: video.thumbnail,
+        playbackUrl: video.playback?.hls,
+        createdAt: video.created,
+        uploader: {
+          id: uploaderId,
+          email: uploaderData?.email || 'Unknown User',
+          photoURL: uploaderData?.photoURL || null
+        }
+      };
+    }));
+
+    console.log(`Successfully mapped ${videos.length} videos`);
+    return videos;
+  } catch (error) {
+    console.error('Error in getCloudflareVideos:', error);
+    throw new Error('Failed to fetch videos');
+  }
+});
+
+// Update stream title and category
+export const updateStreamTitle = onCall({
+  cors: true,
+  maxInstances: 10,
+  region: 'us-central1',
+  secrets: [cloudflareAccountId, cloudflareApiToken]
+}, async (request) => {
+  const auth = request.auth;
+  if (!auth?.uid) {
+    throw new Error('Authentication required');
+  }
+
+  const { title, category } = request.data;
+  if (!title || typeof title !== 'string') {
+    throw new Error('Valid title is required');
+  }
+
+  if (!category || !['gaming', 'just-chatting', 'art', 'software-dev'].includes(category)) {
+    throw new Error('Valid category is required');
+  }
+
+  const db = getDatabase();
+  const userRef = db.ref(`users/${auth.uid}`);
+  
+  // Get user's live input ID
+  const userSnapshot = await userRef.get();
+  if (!userSnapshot.exists() || !userSnapshot.val().liveInputId) {
+    throw new Error('Stream setup not found');
+  }
+
+  const liveInputId = userSnapshot.val().liveInputId;
+
+  try {
+    // Get existing stream data first
+    const streamRef = db.ref(`streams/${liveInputId}`);
+    const streamSnapshot = await streamRef.get();
+    const existingStreamData = streamSnapshot.exists() ? streamSnapshot.val() : {};
+
+    // Update title in Cloudflare
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${cloudflareApiToken.value()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          meta: { 
+            name: title,
+            category
+          }
+        })
+      }
+    );
+
+    const data = await response.json() as CloudflareResponse;
+    if (!data.success) {
+      console.error('Cloudflare update failed:', data.errors);
+      throw new Error('Failed to update stream info');
+    }
+
+    // Update title and category in both stream and user data
+    const updates: { [key: string]: any } = {};
+    
+    // Preserve existing stream data while updating title and category
+    updates[`streams/${liveInputId}`] = {
+      ...existingStreamData,
+      title,
+      category,
+      updatedAt: Date.now()
+    };
+
+    // Update user data
+    updates[`users/${auth.uid}`] = {
+      ...userSnapshot.val(),
+      title,
+      category,
+      updatedAt: Date.now()
+    };
+
+    // Apply all updates atomically
+    await db.ref().update(updates);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating stream info:', error);
+    throw new Error('Failed to update stream info');
+  }
+});
+
+// Get video details
+export const getVideo = onCall({
+  ...functionConfig,
+  enforceAppCheck: false // Allow unauthenticated access
+}, async (request) => {
+  const { videoId } = request.data;
+  if (!videoId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Video ID is required');
+  }
+
+  try {
+    // Get video details from Cloudflare
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/${videoId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${cloudflareApiToken.value()}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Cloudflare API error:', response.status);
+      throw new functions.https.HttpsError('not-found', 'Video not found');
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.result) {
+      console.error('Invalid Cloudflare response:', data);
+      throw new functions.https.HttpsError('internal', 'Failed to fetch video data');
+    }
+
+    // Get uploader details if available
+    let uploaderData = null;
+    if (data.result.meta?.uploadedBy) {
+      const uploaderSnapshot = await admin.database().ref(`users/${data.result.meta.uploadedBy}`).once('value');
+      uploaderData = uploaderSnapshot.val();
+    }
+
+    return {
+      uid: data.result.uid,
+      title: data.result.meta?.name || 'Untitled Video',
+      playbackUrl: data.result.playback?.hls,
+      thumbnail: data.result.thumbnail,
+      createdAt: data.result.created,
+      uploader: uploaderData ? {
+        email: uploaderData.email,
+        photoURL: uploaderData.photoURL
+      } : undefined
+    };
+  } catch (error) {
+    console.error('Error fetching video:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Failed to fetch video');
   }
 }); 

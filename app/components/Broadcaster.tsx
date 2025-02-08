@@ -1,10 +1,11 @@
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { router } from 'expo-router';
+import { onAuthStateChanged } from 'firebase/auth';
+import { getDatabase, onValue, ref } from 'firebase/database';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import { Alert, Clipboard, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Button, Dialog, Portal } from 'react-native-paper';
+import { Button, Dialog, Portal, SegmentedButtons, TextInput } from 'react-native-paper';
 import { auth } from '../firebase';
-import Auth from './Auth';
 
 interface StreamResponse {
   streamId: string;
@@ -18,14 +19,27 @@ interface StreamResponse {
   };
 }
 
+const STREAM_CATEGORIES = [
+  { label: 'Gaming', value: 'gaming' },
+  { label: 'Just Chatting', value: 'just-chatting' },
+  { label: 'Art', value: 'art' },
+  { label: 'Software & Game Dev', value: 'software-dev' }
+];
+
 export default function Broadcaster() {
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('gaming');
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('gaming');
   const [titleError, setTitleError] = useState<string | null>(null);
-  const [showAuth, setShowAuth] = useState(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [streamKey, setStreamKey] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const functions = getFunctions();
+  const database = getDatabase();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -39,6 +53,18 @@ export default function Broadcaster() {
           const getStreamKeyFn = httpsCallable(functions, 'getStreamKey');
           const result = await getStreamKeyFn();
           setStreamKey((result.data as any).streamKey);
+
+          // Load initial title and category from database
+          const userRef = ref(database, `users/${user.uid}`);
+          onValue(userRef, (snapshot) => {
+            const userData = snapshot.val();
+            if (userData) {
+              setTitle(userData.title || '');
+              setCategory(userData.category || 'gaming');
+              setEditTitle(userData.title || '');
+              setEditCategory(userData.category || 'gaming');
+            }
+          });
         } catch (error) {
           console.error('Error initializing user:', error);
         }
@@ -49,6 +75,38 @@ export default function Broadcaster() {
 
     return () => unsubscribe();
   }, []);
+
+  const handleEditPress = () => {
+    setEditTitle(title);
+    setEditCategory(category);
+    setTitleError(null);
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateStreamInfo = async () => {
+    if (!isAuthenticated) {
+      setShowAuthPrompt(true);
+      return;
+    }
+
+    if (!editTitle.trim()) {
+      setTitleError('Title cannot be empty');
+      return;
+    }
+
+    try {
+      const updateTitleFn = httpsCallable(functions, 'updateStreamTitle');
+      await updateTitleFn({ title: editTitle.trim(), category: editCategory });
+      setTitle(editTitle.trim());
+      setCategory(editCategory);
+      setShowEditDialog(false);
+      Alert.alert('Success', 'Stream info updated successfully');
+      setTitleError(null);
+    } catch (error: any) {
+      console.error('Error updating stream info:', error);
+      Alert.alert('Error', error.message || 'Failed to update stream info');
+    }
+  };
 
   const handleRegenerateKey = async () => {
     if (!isAuthenticated) {
@@ -67,16 +125,6 @@ export default function Broadcaster() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setShowAuth(false);
-    } catch (error) {
-      console.error('Logout error:', error);
-      Alert.alert('Error', 'Failed to logout');
-    }
-  };
-
   const copyToClipboard = async (text: string) => {
     try {
       await Clipboard.setString(text);
@@ -87,29 +135,50 @@ export default function Broadcaster() {
     }
   };
 
-  if (showAuth) {
-    return <Auth onAuthSuccess={() => setShowAuth(false)} />;
-  }
+  const getCategoryLabel = (value: string) => {
+    return STREAM_CATEGORIES.find(cat => cat.value === value)?.label || value;
+  };
+
+  const openMenu = () => setMenuVisible(true);
+  const closeMenu = () => setMenuVisible(false);
+
+  const handleCategorySelect = (value: string) => {
+    setEditCategory(value);
+    closeMenu();
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerText}>Stream Settings</Text>
-        {isAuthenticated ? (
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.loginButton} onPress={() => setShowAuth(true)}>
-            <Text style={styles.loginButtonText}>Login</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {isAuthenticated ? (
         <View style={styles.content}>
+          <View style={styles.streamInfoContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Stream Info</Text>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={handleEditPress}
+              >
+                <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Title</Text>
+              <Text style={styles.infoText}>{title || 'No title set'}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Category</Text>
+              <Text style={styles.infoText}>{getCategoryLabel(category)}</Text>
+            </View>
+          </View>
+
           <View style={styles.streamKeyContainer}>
-            <Text style={styles.label}>Your Stream Key:</Text>
+            <Text style={styles.sectionTitle}>Stream Key</Text>
             <View style={styles.streamKeyRow}>
               <Text style={styles.streamKey}>
                 {streamKey ? '••••••••••••••••' : 'No stream key available'}
@@ -154,20 +223,91 @@ export default function Broadcaster() {
         <Dialog
           visible={showAuthPrompt}
           onDismiss={() => setShowAuthPrompt(false)}
-          style={styles.dialog}
+          style={[styles.dialog, { backgroundColor: '#fff' }]}
         >
-          <Dialog.Title>Authentication Required</Dialog.Title>
+          <Dialog.Title style={styles.dialogTitle}>Authentication Required</Dialog.Title>
           <Dialog.Content>
-            <Text>Please login to access stream settings</Text>
+            <Text style={styles.dialogText}>Please login to access stream settings</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => {
-              setShowAuthPrompt(false);
-              setShowAuth(true);
-            }}>
+            <Button 
+              textColor="#007AFF"
+              onPress={() => {
+                setShowAuthPrompt(false);
+                router.push('/auth');
+              }}
+            >
               Login
             </Button>
-            <Button onPress={() => setShowAuthPrompt(false)}>Cancel</Button>
+            <Button 
+              textColor="#FF3B30"
+              onPress={() => setShowAuthPrompt(false)}
+            >
+              Cancel
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={showEditDialog}
+          onDismiss={() => setShowEditDialog(false)}
+          style={[styles.dialog, { backgroundColor: '#fff' }]}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Edit Stream Info</Dialog.Title>
+          <Dialog.Content>
+            <View style={styles.dialogContent}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.dialogLabel}>Title</Text>
+                <TextInput
+                  style={[styles.titleInput, { backgroundColor: '#f5f5f5' }]}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="Enter your stream title"
+                  error={!!titleError}
+                  mode="outlined"
+                  outlineColor="#ccc"
+                  activeOutlineColor="#007AFF"
+                  textColor="#000"
+                  placeholderTextColor="#666"
+                />
+                {titleError && (
+                  <Text style={styles.errorText}>{titleError}</Text>
+                )}
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.dialogLabel}>Category</Text>
+                <SegmentedButtons
+                  value={editCategory}
+                  onValueChange={setEditCategory}
+                  buttons={STREAM_CATEGORIES}
+                  style={styles.categoryButtons}
+                  theme={{
+                    colors: {
+                      primary: '#007AFF',
+                      secondaryContainer: '#007AFF',
+                      onSecondaryContainer: '#FFFFFF',
+                      onSurface: '#000000',
+                    }
+                  }}
+                  density="medium"
+                />
+              </View>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              textColor="#FF3B30"
+              onPress={() => setShowEditDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              textColor="#007AFF"
+              onPress={handleUpdateStreamInfo}
+            >
+              Save
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -194,6 +334,63 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  streamInfoContainer: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#1a1a1a',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  editButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  infoRow: {
+    marginBottom: 15,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  infoText: {
+    fontSize: 16,
+    color: '#333',
+    marginTop: 4,
+  },
   streamKeyContainer: {
     backgroundColor: '#fff',
     padding: 15,
@@ -203,12 +400,17 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
       },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
     }),
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
   },
   streamKeyRow: {
     flexDirection: 'row',
@@ -250,6 +452,16 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
       },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
     }),
   },
   loginPrompt: {
@@ -257,35 +469,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  logoutButton: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  logoutButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  loginButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   dialog: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 12,
+    elevation: 24,
+    maxWidth: 560,
+    width: '90%',
+    alignSelf: 'center',
     ...Platform.select({
       web: {
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+        boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 8,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
       },
     }),
+  },
+  dialogTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  dialogText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+  dialogLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 8,
+  },
+  dialogContent: {
+    paddingTop: 16,
+    paddingHorizontal: 4,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  titleInput: {
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: 5,
+  },
+  categoryButtons: {
+    marginTop: 8,
   },
 }); 
