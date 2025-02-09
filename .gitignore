@@ -41,3 +41,8 @@ app-example
 functions/lib/serviceAccount.json
 functions/src/serviceAccount.json
 serviceAccount.json
+
+# Service account and compiled files
+**/serviceAccount.json
+**/*.js.map
+**/lib/**
