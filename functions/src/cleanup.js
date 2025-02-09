@@ -1,41 +1,35 @@
 const admin = require('firebase-admin');
+const { getDatabase } = require('firebase-admin/database');
 
 // Initialize Firebase Admin
-const app = admin.initializeApp();
+admin.initializeApp({
+  databaseURL: 'https://streamsor-6fb0e-default-rtdb.firebaseio.com'
+});
 
-// Initialize database
-const db = admin.database();
-
-async function cleanupStreams() {
-    console.log('Starting cleanup of all streams...');
-    try {
-        // Get all streams
-        const streamsRef = db.ref('streams');
-        const streamsSnapshot = await streamsRef.once('value');
-        if (!streamsSnapshot.exists()) {
-            console.log('No streams found in database.');
-            process.exit(0);
-        }
-        const updates = {};
-        let count = 0;
-        // Add all streams and their chats to be deleted
-        streamsSnapshot.forEach((streamSnapshot) => {
-            const streamId = streamSnapshot.key;
-            if (streamId) {
-                updates[`streams/${streamId}`] = null;
-                updates[`chats/${streamId}`] = null;
-                count++;
-            }
-        });
-        console.log(`Found ${count} streams to delete...`);
-        // Delete all streams and chats in one atomic update
-        await db.ref().update(updates);
-        console.log(`Successfully deleted ${count} streams and their associated chats.`);
-    }
-    catch (error) {
-        console.error('Error during cleanup:', error);
-        process.exit(1);
-    }
+async function deleteStreams() {
+  try {
+    const db = getDatabase();
+    const streamsRef = db.ref('streams');
+    
+    const snapshot = await streamsRef.once('value');
+    const updates = {};
+    let deletedCount = 0;
+    
+    snapshot.forEach((childSnapshot) => {
+      const streamId = childSnapshot.key;
+      if (streamId !== 'b4cdf5276546a2e3bb2af5c823e73d36') {
+        updates[streamId] = null;
+        deletedCount++;
+      }
+    });
+    
+    await streamsRef.update(updates);
+    console.log(`Successfully deleted ${deletedCount} streams, keeping b4cdf5276546a2e3bb2af5c823e73d36`);
     process.exit(0);
+  } catch (error) {
+    console.error('Error:', error);
+    process.exit(1);
+  }
 }
-cleanupStreams();
+
+deleteStreams();

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getDatabase, onValue, ref } from 'firebase/database';
+import { doc, getFirestore, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import { Alert, Clipboard, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -36,10 +36,12 @@ export default function Broadcaster() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [streamKey, setStreamKey] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [liveInputId, setLiveInputId] = useState<string | null>(null);
   const functions = getFunctions();
-  const database = getDatabase();
+  const firestore = getFirestore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [showStreamKey, setShowStreamKey] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -48,28 +50,30 @@ export default function Broadcaster() {
         // Initialize user and get stream key
         try {
           const initUserFn = httpsCallable(functions, 'initializeUser');
-          await initUserFn();
+          const initResult = await initUserFn();
+          const newLiveInputId = (initResult.data as any).liveInputId;
+          setLiveInputId(newLiveInputId);
           
-          const getStreamKeyFn = httpsCallable(functions, 'getStreamKey');
-          const result = await getStreamKeyFn();
-          setStreamKey((result.data as any).streamKey);
-
-          // Load initial title and category from database
-          const userRef = ref(database, `users/${user.uid}`);
-          onValue(userRef, (snapshot) => {
-            const userData = snapshot.val();
+          // Load initial title and category from Firestore
+          const userDocRef = doc(firestore, 'users', newLiveInputId);
+          const unsubscribeSnapshot = onSnapshot(userDocRef, (snapshot) => {
+            const userData = snapshot.data();
             if (userData) {
-              setTitle(userData.title || '');
-              setCategory(userData.category || 'gaming');
-              setEditTitle(userData.title || '');
-              setEditCategory(userData.category || 'gaming');
+              setTitle(userData.streamTitle || '');
+              setCategory(userData.streamCategory || 'gaming');
+              setEditTitle(userData.streamTitle || '');
+              setEditCategory(userData.streamCategory || 'gaming');
+              setStreamKey(userData.streamKey || null);
             }
           });
+
+          return () => unsubscribeSnapshot();
         } catch (error) {
           console.error('Error initializing user:', error);
         }
       } else {
         setStreamKey(null);
+        setLiveInputId(null);
       }
     });
 
@@ -94,9 +98,20 @@ export default function Broadcaster() {
       return;
     }
 
+    if (!liveInputId) {
+      console.error('No liveInputId found');
+      Alert.alert('Error', 'Stream setup not found fr fr');
+      return;
+    }
+
     try {
       const updateTitleFn = httpsCallable(functions, 'updateStreamTitle');
-      await updateTitleFn({ title: editTitle.trim(), category: editCategory });
+      await updateTitleFn({ 
+        title: editTitle.trim(), 
+        category: editCategory,
+        liveInputId: liveInputId 
+      });
+      
       setTitle(editTitle.trim());
       setCategory(editCategory);
       setShowEditDialog(false);
@@ -105,23 +120,6 @@ export default function Broadcaster() {
     } catch (error: any) {
       console.error('Error updating stream info:', error);
       Alert.alert('Error', error.message || 'Failed to update stream info');
-    }
-  };
-
-  const handleRegenerateKey = async () => {
-    if (!isAuthenticated) {
-      setShowAuthPrompt(true);
-      return;
-    }
-
-    try {
-      const regenerateKeyFn = httpsCallable(functions, 'regenerateStreamKey');
-      const result = await regenerateKeyFn();
-      setStreamKey((result.data as any).streamKey);
-      Alert.alert('Success', 'Stream key regenerated successfully');
-    } catch (error: any) {
-      console.error('Error regenerating stream key:', error);
-      Alert.alert('Error', error.message || 'Failed to regenerate stream key');
     }
   };
 
@@ -181,21 +179,21 @@ export default function Broadcaster() {
             <Text style={styles.sectionTitle}>Stream Key</Text>
             <View style={styles.streamKeyRow}>
               <Text style={styles.streamKey}>
-                {streamKey ? '••••••••••••••••' : 'No stream key available'}
+                {streamKey ? (showStreamKey ? streamKey : '••••••••••••••••') : 'No stream key available'}
               </Text>
               {streamKey && (
                 <>
                   <TouchableOpacity
-                    style={styles.copyButton}
+                    style={[styles.button, styles.showButton]}
+                    onPress={() => setShowStreamKey(!showStreamKey)}
+                  >
+                    <Text style={styles.buttonText}>{showStreamKey ? 'Hide' : 'Show'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, styles.copyButton]}
                     onPress={() => copyToClipboard(streamKey)}
                   >
                     <Text style={styles.buttonText}>Copy</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.regenerateButton}
-                    onPress={handleRegenerateKey}
-                  >
-                    <Text style={styles.buttonText}>Regenerate</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -210,7 +208,7 @@ export default function Broadcaster() {
             {'\n'}4. Set Server to: rtmps://live.cloudflare.com:443/live
             {'\n'}5. Copy and paste your Stream Key
             {'\n'}6. Click "Start Streaming" in OBS when ready
-            {'\n\n'}Note: Your stream key is persistent and will remain the same until you regenerate it.
+            {'\n\n'}Note: Your stream key is persistent and will remain the same.
           </Text>
         </View>
       ) : (
@@ -234,7 +232,10 @@ export default function Broadcaster() {
               textColor="#007AFF"
               onPress={() => {
                 setShowAuthPrompt(false);
-                router.push('/auth');
+                router.push({
+                  pathname: '/auth',
+                  params: { redirect: '/broadcast' }
+                });
               }}
             >
               Login
@@ -425,17 +426,16 @@ const styles = StyleSheet.create({
       default: 'Courier',
     }),
   },
-  copyButton: {
-    backgroundColor: '#007AFF',
+  button: {
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 6,
   },
-  regenerateButton: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 6,
+  showButton: {
+    backgroundColor: '#34C759',
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
   },
   buttonText: {
     color: '#fff',

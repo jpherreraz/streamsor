@@ -1,4 +1,5 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -27,6 +28,7 @@ export default function Auth({ onAuthSuccess, initialMode = true }: AuthProps) {
   const [loading, setLoading] = useState(false);
   const [passwordsMatch, setPasswordsMatch] = useState<boolean | null>(null);
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>(null);
+  const functions = getFunctions();
 
   const validateEmail = (email: string): EmailValidity => {
     if (!email) return null;
@@ -92,6 +94,20 @@ export default function Auth({ onAuthSuccess, initialMode = true }: AuthProps) {
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
       }
+
+      // Wait for a bit to ensure auth state is initialized
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      try {
+        // Try to sync user data but don't block auth success
+        const syncPublicUserData = httpsCallable(functions, 'syncPublicUserData');
+        await syncPublicUserData();
+      } catch (syncError) {
+        console.warn('Failed to sync user data:', syncError);
+        // Don't block auth success if sync fails
+      }
+
+      // Call success callback even if sync fails
       onAuthSuccess?.();
     } catch (error: any) {
       console.error('Auth error:', error);

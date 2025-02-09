@@ -18,7 +18,10 @@ async function createLiveInput(streamKey: string): Promise<any> {
         },
         body: JSON.stringify({
           meta: { streamKey },
-          recording: { mode: "automatic" }
+          recording: { 
+            mode: "automatic",
+            namePrefix: "${meta.name}"
+          }
         })
       }
     );

@@ -1,15 +1,20 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import React from 'react';
 import NavBar from '../components/NavBar';
 
 export default function TabsLayout() {
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleAuthClick = (mode: 'login' | 'signup') => {
+    console.log('Navigating to auth with redirect:', pathname);
     router.push({
       pathname: '/auth',
-      params: { mode }
+      params: { 
+        mode,
+        redirect: pathname 
+      }
     });
   };
 
@@ -32,7 +37,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Live Streams',
-          tabBarLabel: 'Streams',
+          tabBarLabel: 'Live Streams',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="live-tv" size={size} color={color} />
           ),
@@ -64,7 +69,7 @@ export default function TabsLayout() {
           title: 'Channel',
           tabBarLabel: 'Channel',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="account-box" size={size} color={color} />
+            <MaterialIcons name="person" size={size} color={color} />
           ),
         }}
       />

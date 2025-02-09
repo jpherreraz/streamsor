@@ -1,11 +1,11 @@
 import React from 'react';
 import { SafeAreaView } from 'react-native';
-import StreamView from '../components/StreamView';
+import VideosScreen from '../components/StreamView';
 
 export default function StreamsScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <StreamView />
+      <VideosScreen />
     </SafeAreaView>
   );
 } 

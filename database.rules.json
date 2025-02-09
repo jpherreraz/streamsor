@@ -1,37 +1,88 @@
 {
   "rules": {
-    "streams": {
-      ".indexOn": ["streamKey", "userId"],
-      ".read": true,
-      ".write": false,
-      "$streamId": {
-        ".read": true,
-        ".write": false,
-        "viewerCount": {
-          ".write": false
-        }
-      }
-    },
-    "chats": {
-      ".read": true,
-      ".write": false,
-      "$streamId": {
-        ".read": true,
-        ".write": false,
-        "messages": {
-          ".read": true,
-          ".write": false,
-          ".indexOn": "timestamp"
-        }
-      }
-    },
+    ".read": false,
+    ".write": false,
     "users": {
-      ".read": "auth != null",
-      ".write": false,
-      ".indexOn": ["streamKey"],
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": false
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['id'])",
+        "id": {
+          ".validate": "newData.isString() && newData.val() === $uid"
+        },
+        "email": {
+          ".validate": "newData.isString()"
+        },
+        "photoURL": {
+          ".validate": "newData.isString()"
+        },
+        "displayName": {
+          ".validate": "newData.isString()"
+        },
+        "streams": {
+          "$streamId": {
+            ".read": true,
+            ".write": "auth != null && auth.uid == $uid",
+            ".validate": "newData.hasChildren(['id', 'liveInputId'])",
+            "id": {
+              ".validate": "newData.isString()"
+            },
+            "liveInputId": {
+              ".validate": "newData.isString()"
+            },
+            "category": {
+              ".validate": "newData.isString()"
+            },
+            "endedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "lastActive": {
+              ".validate": "newData.isNumber()"
+            },
+            "playback": {
+              "dash": {
+                ".validate": "newData.isString()"
+              },
+              "hls": {
+                ".validate": "newData.isString()"
+              }
+            },
+            "status": {
+              ".validate": "newData.isString() && (newData.val() === 'live' || newData.val() === 'offline')"
+            },
+            "statusMessage": {
+              ".validate": "newData.isString()"
+            },
+            "title": {
+              ".validate": "newData.isString()"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "viewerCount": {
+              ".validate": "newData.isNumber()"
+            }
+          }
+        }
+      }
+    },
+    "streamers": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['id'])",
+        "id": {
+          ".validate": "newData.isString() && newData.val() === $uid"
+        },
+        "email": {
+          ".validate": "newData.isString()"
+        },
+        "photoURL": {
+          ".validate": "newData.isString()"
+        },
+        "displayName": {
+          ".validate": "newData.isString()"
+        }
       }
     }
   }

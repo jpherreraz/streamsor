@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
 import { functions } from '../firebaseConfig';
 
 interface Video {
@@ -10,9 +11,10 @@ interface Video {
   thumbnail: string;
   playbackUrl: string;
   createdAt: string;
-  uploader?: {
-    photoURL?: string;
-    email?: string;
+  uploader: {
+    id: string;
+    email: string;
+    photoURL: string | null;
   };
 }
 
@@ -20,18 +22,34 @@ export default function VideosScreen() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
+  const { user } = useAuth();
+
+  // Calculate number of columns based on screen width
+  // Each card should be at least 300px wide
+  const numColumns = Math.max(1, Math.floor(width / 300));
+  const cardWidth = (width - (16 + (8 * (numColumns - 1)))) / numColumns; // Account for padding and gaps
 
   useEffect(() => {
+    console.log('[DEBUG] Auth state:', {
+      isAuthenticated: !!user,
+      userId: user?.uid,
+      userEmail: user?.email
+    });
+
     const fetchVideos = async () => {
       try {
         setError(null);
-        const getCloudflareVideos = httpsCallable(functions, 'getCloudflareVideos');
-        console.log('Calling getCloudflareVideos function...');
+        console.log('[DEBUG] Fetching videos...');
+        const getCloudflareVideos = httpsCallable<void, Video[]>(functions, 'getCloudflareVideos');
         const result = await getCloudflareVideos();
-        console.log('Got videos:', result.data);
-        setVideos(result.data as Video[]);
+        console.log('[DEBUG] Videos response:', {
+          count: result.data.length,
+          firstVideo: result.data[0],
+        });
+        setVideos(result.data);
       } catch (error: any) {
-        console.error('Error fetching videos:', error);
+        console.error('[DEBUG] Error fetching videos:', error);
         setError(error?.message || 'Failed to load videos');
         setVideos([]);
       } finally {
@@ -40,49 +58,48 @@ export default function VideosScreen() {
     };
 
     fetchVideos();
-  }, []);
+  }, [user]);
 
   const handleVideoPress = (id: string) => {
     router.push(`/video/${id}`);
   };
 
-  const renderVideo = ({ item }: { item: Video }) => (
-    <TouchableOpacity 
-      style={styles.videoCard}
-      onPress={() => handleVideoPress(item.uid)}
-    >
-      <Image 
-        source={{ uri: item.thumbnail }} 
-        style={styles.thumbnail}
-        resizeMode="cover"
-      />
-      <View style={styles.videoInfo}>
-        <View style={styles.infoContainer}>
-          {item.uploader?.photoURL ? (
-            <Image 
-              source={{ uri: item.uploader.photoURL }} 
-              style={styles.uploaderAvatar} 
-            />
-          ) : (
-            <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
-              <Text style={styles.uploaderAvatarText}>
-                {item.uploader?.email?.[0]?.toUpperCase() || '?'}
-              </Text>
-            </View>
-          )}
-          <View style={styles.textContent}>
-            <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+  const renderVideo = ({ item }: { item: Video }) => {
+    console.log('[DEBUG] Rendering video card:', {
+      id: item.uid,
+      title: item.title,
+      uploader: item.uploader
+    });
+
+    return (
+      <TouchableOpacity 
+        style={[styles.videoCard, { width: cardWidth }]}
+        onPress={() => handleVideoPress(item.uid)}
+      >
+        <Image 
+          source={{ uri: item.thumbnail }} 
+          style={styles.thumbnail}
+          resizeMode="cover"
+        />
+        <View style={styles.videoInfo}>
+          <Text style={styles.title} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <View style={styles.uploaderInfo}>
+            {item.uploader.photoURL && (
+              <Image 
+                source={{ uri: item.uploader.photoURL }} 
+                style={styles.uploaderPhoto}
+              />
+            )}
             <Text style={styles.uploaderEmail} numberOfLines={1}>
-              {item.uploader?.email || 'Unknown User'}
-            </Text>
-            <Text style={styles.date}>
-              {new Date(item.createdAt).toLocaleDateString()}
+              {item.uploader.email.split('@')[0]}
             </Text>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -116,7 +133,9 @@ export default function VideosScreen() {
         renderItem={renderVideo}
         keyExtractor={(item) => item.uid}
         contentContainerStyle={styles.listContainer}
-        numColumns={1}
+        numColumns={numColumns}
+        key={numColumns} // Force re-render when columns change
+        columnWrapperStyle={numColumns > 1 ? styles.row : undefined}
         style={styles.list}
       />
     </View>
@@ -143,15 +162,21 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 8,
+  },
+  row: {
+    justifyContent: 'flex-start',
     gap: 8,
   },
   videoCard: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+    borderRadius: 12,
     overflow: 'hidden',
-    width: 320,
-    marginBottom: 8,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   thumbnail: {
     width: '100%',
@@ -159,51 +184,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   videoInfo: {
-    padding: 8,
-    backgroundColor: '#fff',
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  textContent: {
-    flex: 1,
-    marginLeft: 8,
+    padding: 12,
   },
   title: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 4,
     color: '#1a1a1a',
-  },
-  uploaderAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  uploaderAvatarPlaceholder: {
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploaderAvatarText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  uploaderEmail: {
-    fontSize: 11,
-    color: '#666',
-    marginBottom: 2,
-  },
-  date: {
-    fontSize: 11,
-    color: '#666',
+    marginBottom: 8,
   },
   errorText: {
     color: '#dc2626',
     textAlign: 'center',
     marginHorizontal: 20,
     fontSize: 16,
+  },
+  uploaderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  uploaderPhoto: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  uploaderEmail: {
+    fontSize: 13,
+    color: '#666',
+    flex: 1,
+    fontWeight: '500',
   },
 }); 

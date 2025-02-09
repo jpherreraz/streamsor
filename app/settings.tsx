@@ -220,7 +220,10 @@ export default function SettingsScreen() {
           <Text style={styles.loginPrompt}>Please login to access settings</Text>
           <TouchableOpacity 
             style={styles.loginButton}
-            onPress={() => router.push('/auth')}
+            onPress={() => router.push({
+              pathname: '/auth',
+              params: { redirect: '/settings' }
+            })}
           >
             <Text style={styles.loginButtonText}>Login</Text>
           </TouchableOpacity>

@@ -15,6 +15,7 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -28,27 +29,15 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
 
   const handleLogout = async () => {
     try {
-      await Alert.alert(
-        'Logout',
-        'Are you sure you want to logout?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Logout',
-            style: 'destructive',
-            onPress: async () => {
-              await signOut(auth);
-              setMenuVisible(false);
-            },
-          },
-        ],
-        { cancelable: true }
-      );
+      setIsLoggingOut(true);
+      await signOut(auth);
+      setMenuVisible(false);
+      router.replace('/');
     } catch (error) {
       console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to logout. Please try again.');
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -85,7 +74,10 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
       <View style={styles.rightSection}>
         {!isAuthenticated ? (
           <>
-            <TouchableOpacity style={styles.authButton} onPress={() => onAuthClick('login')}>
+            <TouchableOpacity 
+              style={styles.authButton} 
+              onPress={() => onAuthClick('login')}
+            >
               <Text style={styles.authButtonText}>Sign In</Text>
             </TouchableOpacity>
             <TouchableOpacity 
@@ -136,7 +128,7 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
                 />
                 <MenuItem 
                   icon="logout"
-                  title="Log Out"
+                  title={isLoggingOut ? "Logging out..." : "Log Out"}
                   onPress={handleLogout}
                   isDestructive
                 />

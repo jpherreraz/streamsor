@@ -4,10 +4,18 @@ import { StyleSheet, View } from 'react-native';
 import Auth from './components/Auth';
 
 export default function AuthScreen() {
-  const { mode } = useLocalSearchParams<{ mode: 'login' | 'signup' }>();
+  const { mode, redirect } = useLocalSearchParams<{ 
+    mode: 'login' | 'signup',
+    redirect?: string 
+  }>();
 
   const handleAuthSuccess = () => {
-    router.back();
+    console.log('Auth success, redirecting to:', redirect);
+    if (redirect) {
+      router.replace(redirect);
+    } else {
+      router.back();
+    }
   };
 
   return (
