@@ -1,8 +1,19 @@
+import * as dotenv from 'dotenv';
 import * as admin from 'firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { createRequire } from 'module';
 import fetch from 'node-fetch';
 import * as path from 'path';
+
+// Load env vars fr fr
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+const TEST_PASSWORD = process.env.TEST_PASSWORD || 'defaultTestPass123!';
+
+if (!FIREBASE_API_KEY) {
+    throw new Error('yo fam you need to set FIREBASE_API_KEY in your .env file fr fr');
+}
 
 const customRequire = createRequire(__dirname);
 const serviceAccount = customRequire(path.join(__dirname, '../../serviceAccount.json'));
@@ -37,10 +48,9 @@ async function testCloudFunctions() {
   try {
     // Create a test user
     const userEmail = `test${Date.now()}@example.com`;
-    const userPassword = 'testPassword123!';
     const user = await getAuth().createUser({
       email: userEmail,
-      password: userPassword,
+      password: TEST_PASSWORD,
     });
 
     console.log('Created test user:', user.uid);
@@ -51,7 +61,7 @@ async function testCloudFunctions() {
 
     // Exchange custom token for ID token
     const tokenResponse = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=AIzaSyBNTNWagCvsTMk1sNm8Gx_C_GcTZJ3lZCs`,
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${FIREBASE_API_KEY}`,
       {
         method: 'POST',
         headers: {

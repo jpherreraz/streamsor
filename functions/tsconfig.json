@@ -1,19 +1,16 @@
 {
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "target": "ES2022",
-    "outDir": "lib",
-    "rootDir": "src",
-    "sourceMap": true,
-    "strict": true,
+    "module": "commonjs",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
+    "outDir": "lib",
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2019",
+    "lib": ["es2019", "dom"],
     "skipLibCheck": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "allowJs": true,
-    "lib": ["es2022", "dom"]
+    "moduleResolution": "node",
+    "esModuleInterop": true
   },
   "compileOnSave": true,
   "include": [

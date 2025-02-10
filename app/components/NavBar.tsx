@@ -2,15 +2,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Surface } from 'react-native-paper';
 import { auth } from '../firebase';
 
-interface NavBarProps {
-  onAuthClick: (mode: 'login' | 'signup') => void;
-}
-
-export default function NavBar({ onAuthClick }: NavBarProps) {
+export default function NavBar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
@@ -46,6 +42,16 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
     router.push(route);
   };
 
+  const handleAuthClick = (mode: 'login' | 'signup') => {
+    router.push({
+      pathname: '/auth',
+      params: { 
+        mode,
+        redirect: router.pathname 
+      }
+    });
+  };
+
   const MenuItem = ({ icon, title, onPress, isDestructive = false }) => (
     <TouchableOpacity 
       style={styles.menuItem} 
@@ -76,13 +82,13 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
           <>
             <TouchableOpacity 
               style={styles.authButton} 
-              onPress={() => onAuthClick('login')}
+              onPress={() => handleAuthClick('login')}
             >
               <Text style={styles.authButtonText}>Sign In</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.authButton, styles.signUpButton]} 
-              onPress={() => onAuthClick('signup')}
+              onPress={() => handleAuthClick('signup')}
             >
               <Text style={styles.authButtonText}>Sign Up</Text>
             </TouchableOpacity>
@@ -110,7 +116,20 @@ export default function NavBar({ onAuthClick }: NavBarProps) {
               </View>
             </TouchableOpacity>
             {menuVisible && (
-              <Surface style={[styles.menu, { boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }]}>
+              <Surface style={[
+                styles.menu, 
+                Platform.OS === 'web' ? { 
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                  position: 'absolute',
+                  zIndex: 1000,
+                } : {
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 3,
+                }
+              ]}>
                 <MenuItem 
                   icon="account-circle"
                   title="Channel"
@@ -150,6 +169,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    zIndex: 100,
   },
   leftSection: {
     flex: 1,
@@ -180,6 +200,7 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     position: 'relative',
+    zIndex: 1000,
   },
   avatarContainer: {
     width: 32,
@@ -207,6 +228,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 200,
     padding: 8,
+    zIndex: 1000,
   },
   menuItem: {
     flexDirection: 'row',

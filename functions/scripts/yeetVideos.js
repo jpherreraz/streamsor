@@ -9,9 +9,12 @@ const __dirname = dirname(__filename);
 const envPath = join(__dirname, '..', '..', '.env');
 dotenv.config({ path: envPath });
 
-// hardcode them secrets for testing fr fr
-const CLOUDFLARE_ACCOUNT_ID = 'ad763a44ded8e093d6ef0941fa931078';
-const CLOUDFLARE_API_TOKEN = 'o4qqksXK8as0TI0nqS_A8cru4LVAd6rWQGOlMW7t';
+const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+
+if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_API_TOKEN) {
+    throw new Error('fam you need to set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in your .env file fr fr');
+}
 
 async function yeetAllVideos() {
     try {

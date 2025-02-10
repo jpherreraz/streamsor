@@ -25,31 +25,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ]
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "eas": {
-        "projectId": "ecb1bd07-858b-40de-be62-20101e711ec8"
-      }
-    },
-    "owner": "jpherrera",
-    "updates": {
-      "url": "https://u.expo.dev/ecb1bd07-858b-40de-be62-20101e711ec8"
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    }
+    "assetBundlePatterns": [
+      "**/*",
+      "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*"
+    ]
   }
 }
