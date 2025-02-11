@@ -273,33 +273,33 @@ export default function StreamChat({ streamId, username = 'Anonymous' }: StreamC
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#fff',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#fff',
   },
   loadingText: {
-    color: '#fff',
+    color: '#666',
     marginTop: 12,
   },
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: '#eee',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   headerText: {
-    color: '#fff',
+    color: '#1a1a1a',
     fontSize: 16,
     fontWeight: 'bold',
   },
   connectedText: {
-    color: '#4CAF50',
+    color: '#34C759',
     fontSize: 12,
   },
   messagesContainer: {
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     marginBottom: 16,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: '#f5f9ff',
     padding: 12,
     borderRadius: 8,
   },
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   messageText: {
-    color: '#fff',
+    color: '#1a1a1a',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -338,16 +338,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 12,
     borderTopWidth: 1,
-    borderTopColor: '#333',
-    backgroundColor: '#2a2a2a',
+    borderTopColor: '#eee',
+    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
-    backgroundColor: '#333',
+    backgroundColor: '#f5f5f5',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    color: '#fff',
+    color: '#1a1a1a',
     marginRight: 8,
     maxHeight: 100,
     fontSize: 14,
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     minWidth: 60,
   },
   sendButtonDisabled: {
-    backgroundColor: '#333',
+    backgroundColor: '#f5f5f5',
   },
   sendButtonText: {
     color: '#fff',
@@ -379,10 +379,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#fff',
   },
   errorText: {
-    color: '#ff4444',
+    color: '#ff3b30',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 16,
@@ -402,9 +402,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+    backgroundColor: '#fff',
   },
   authPromptText: {
-    color: '#fff',
+    color: '#1a1a1a',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 16,

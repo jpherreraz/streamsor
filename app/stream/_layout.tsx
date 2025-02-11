@@ -7,14 +7,7 @@ export default function StreamLayout() {
       <Stack.Screen
         name="[id]"
         options={{
-          title: 'Live Stream',
-          headerStyle: {
-            backgroundColor: '#000',
-          },
-          headerTintColor: '#fff',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
+          headerShown: false,
           presentation: 'modal',
         }}
       />

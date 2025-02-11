@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { httpsCallable } from 'firebase/functions';
-import React, { useEffect, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, FlatList, Image, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { functions } from '../firebaseConfig';
 
@@ -20,17 +20,96 @@ interface Video {
   };
 }
 
-export default function VideosScreen() {
+const LiveBadge = () => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.5,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <View style={styles.liveBadgeContainer}>
+      <Animated.View 
+        style={[
+          styles.liveDot,
+          {
+            opacity: pulseAnim,
+            transform: [{
+              scale: pulseAnim
+            }]
+          }
+        ]} 
+      />
+      <Text style={styles.liveText}>LIVE</Text>
+    </View>
+  );
+};
+
+const ShimmerEffect = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    shimmer.start();
+
+    return () => shimmer.stop();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFillObject,
+        {
+          opacity: shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.3, 0.7],
+          }),
+          backgroundColor: '#fff',
+        },
+      ]}
+    />
+  );
+};
+
+export default function StreamView() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const { user } = useAuth();
 
-  // Calculate number of columns based on screen width
+  // Calculate number of columns based on available width
+  // Account for sidebar (240px) on web
+  const availableWidth = Platform.OS === 'web' ? width - 240 : width;
   // Each card should be at least 300px wide
-  const numColumns = Math.max(1, Math.floor(width / 300));
-  const cardWidth = (width - (16 + (8 * (numColumns - 1)))) / numColumns; // Account for padding and gaps
+  const numColumns = Math.max(1, Math.floor((availableWidth - 32) / 300)); // Account for container padding (16px * 2)
+  const cardWidth = (availableWidth - (32 + (8 * (numColumns - 1)))) / numColumns; // Account for padding and gaps
 
   useEffect(() => {
     console.log('[DEBUG] Auth state:', {
@@ -66,63 +145,96 @@ export default function VideosScreen() {
     router.push(`/stream/${id}`);
   };
 
-  const renderVideo = ({ item }: { item: Video }) => {
-    console.log('[DEBUG] Rendering video card:', {
-      id: item.uid,
-      title: item.title,
-      uploader: item.uploader
-    });
-
-    return (
-      <TouchableOpacity 
-        style={[styles.videoCard, { width: cardWidth }]}
-        onPress={() => handleVideoPress(item.uid)}
-      >
+  const renderVideo = ({ item }: { item: Video }) => (
+    <TouchableOpacity 
+      style={[styles.videoCard, { width: cardWidth }]}
+      onPress={() => handleVideoPress(item.uid)}
+    >
+      <View style={styles.thumbnailContainer}>
         <Image 
           source={{ uri: item.thumbnail }} 
           style={styles.thumbnail}
           resizeMode="cover"
         />
-        <View style={styles.videoInfo}>
-          <Text style={styles.title} numberOfLines={2}>
-            {item.title}
+        <LiveBadge />
+      </View>
+      <View style={styles.videoInfo}>
+        <Text style={styles.title} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <View style={styles.uploaderInfo}>
+          {item.uploader.photoURL && (
+            <Image 
+              source={{ uri: item.uploader.photoURL }} 
+              style={styles.uploaderPhoto}
+            />
+          )}
+          <Text style={styles.uploaderEmail} numberOfLines={1}>
+            {item.uploader.email.split('@')[0]}
           </Text>
-          <View style={styles.uploaderInfo}>
-            {item.uploader.photoURL && (
-              <Image 
-                source={{ uri: item.uploader.photoURL }} 
-                style={styles.uploaderPhoto}
-              />
-            )}
-            <Text style={styles.uploaderEmail} numberOfLines={1}>
-              {item.uploader.email.split('@')[0]}
-            </Text>
-          </View>
         </View>
-      </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderLoadingSkeleton = () => {
+    const skeletonItems = Array(6).fill(0);
+    return (
+      <View style={styles.container}>
+        <Text style={styles.header}>Live Streams</Text>
+        <View style={styles.skeletonGrid}>
+          {skeletonItems.map((_, index) => (
+            <View 
+              key={index} 
+              style={[styles.videoCard, styles.skeletonCard, { width: cardWidth }]}
+            >
+              <View style={styles.thumbnailContainer}>
+                <View style={[styles.thumbnail, styles.skeletonThumbnail]}>
+                  <ShimmerEffect />
+                </View>
+              </View>
+              <View style={styles.videoInfo}>
+                <View style={[styles.skeletonText, { width: '80%', height: 20, marginBottom: 8, overflow: 'hidden' }]}>
+                  <ShimmerEffect />
+                </View>
+                <View style={styles.uploaderInfo}>
+                  <View style={[styles.uploaderPhoto, styles.skeletonAvatar, { overflow: 'hidden' }]}>
+                    <ShimmerEffect />
+                  </View>
+                  <View style={[styles.skeletonText, { width: '60%', height: 16, overflow: 'hidden' }]}>
+                    <ShimmerEffect />
+                  </View>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
     );
   };
 
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <Text>Loading videos...</Text>
-      </View>
-    );
+    return renderLoadingSkeleton();
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>{error}</Text>
+      <View style={styles.container}>
+        <Text style={styles.header}>Live Streams</Text>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
       </View>
     );
   }
 
   if (videos.length === 0) {
     return (
-      <View style={styles.centered}>
-        <Text>No videos found</Text>
+      <View style={styles.container}>
+        <Text style={styles.header}>Live Streams</Text>
+        <View style={styles.centered}>
+          <Text>No livestreams found</Text>
+        </View>
       </View>
     );
   }
@@ -147,76 +259,127 @@ export default function VideosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
+    padding: 16,
   },
   header: {
     fontSize: 24,
     fontWeight: 'bold',
-    padding: 16,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  list: {
-    flex: 1,
+    marginBottom: 16,
+    color: '#1a1a1a',
   },
   listContainer: {
     padding: 8,
   },
   row: {
-    justifyContent: 'flex-start',
     gap: 8,
+  },
+  list: {
+    flex: 1,
   },
   videoCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
+  },
+  thumbnailContainer: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 16 / 9,
   },
   thumbnail: {
     width: '100%',
-    aspectRatio: 16/9,
-    backgroundColor: '#f0f0f0',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#f5f5f5',
   },
   videoInfo: {
     padding: 12,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  errorText: {
-    color: '#dc2626',
-    textAlign: 'center',
-    marginHorizontal: 20,
     fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#1a1a1a',
   },
   uploaderInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
   },
   uploaderPhoto: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
   },
   uploaderEmail: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#666',
+  },
+  centered: {
     flex: 1,
-    fontWeight: '500',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  errorText: {
+    color: '#ff3b30',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skeletonCard: {
+    opacity: 1,
+  },
+  skeletonThumbnail: {
+    backgroundColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  skeletonText: {
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+  },
+  skeletonAvatar: {
+    backgroundColor: '#e0e0e0',
+  },
+  liveBadgeContainer: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(255, 0, 0, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+  liveText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 }); 

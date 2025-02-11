@@ -5,6 +5,14 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Surface } from 'react-native-paper';
 import { auth } from '../firebase';
+import AuthModal from './AuthModal';
+
+interface MenuItemProps {
+  icon: string;
+  title: string;
+  onPress: () => void;
+  isDestructive?: boolean;
+}
 
 export default function NavBar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -12,6 +20,8 @@ export default function NavBar() {
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -28,7 +38,7 @@ export default function NavBar() {
       setIsLoggingOut(true);
       await signOut(auth);
       setMenuVisible(false);
-      router.replace('/');
+      router.replace('/(tabs)');
     } catch (error) {
       console.error('Logout error:', error);
       Alert.alert('Error', 'Failed to logout. Please try again.');
@@ -39,26 +49,21 @@ export default function NavBar() {
 
   const handleMenuItemPress = (route: string) => {
     setMenuVisible(false);
-    router.push(route);
+    router.push(route as any);
   };
 
   const handleAuthClick = (mode: 'login' | 'signup') => {
-    router.push({
-      pathname: '/auth',
-      params: { 
-        mode,
-        redirect: router.pathname 
-      }
-    });
+    setAuthMode(mode);
+    setShowAuthModal(true);
   };
 
-  const MenuItem = ({ icon, title, onPress, isDestructive = false }) => (
+  const MenuItem = ({ icon, title, onPress, isDestructive = false }: MenuItemProps) => (
     <TouchableOpacity 
       style={styles.menuItem} 
       onPress={onPress}
     >
       <MaterialIcons 
-        name={icon} 
+        name={icon as any} 
         size={24} 
         color={isDestructive ? '#FF3B30' : '#1a1a1a'} 
       />
@@ -72,91 +77,106 @@ export default function NavBar() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.leftSection}>
-        <Text style={styles.logo}>Streamsor</Text>
-      </View>
-      
-      <View style={styles.rightSection}>
-        {!isAuthenticated ? (
-          <>
-            <TouchableOpacity 
-              style={styles.authButton} 
-              onPress={() => handleAuthClick('login')}
-            >
-              <Text style={styles.authButtonText}>Sign In</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.authButton, styles.signUpButton]} 
-              onPress={() => handleAuthClick('signup')}
-            >
-              <Text style={styles.authButtonText}>Sign Up</Text>
-            </TouchableOpacity>
-            <View style={[styles.avatarContainer, styles.avatarContainerUnauth]}>
-              <MaterialIcons name="person-outline" size={20} color="#999" />
-            </View>
-          </>
-        ) : (
-          <View style={styles.menuContainer}>
-            <TouchableOpacity 
-              onPress={() => setMenuVisible(!menuVisible)}
-              style={{ pointerEvents: 'auto' }}
-            >
-              <View style={styles.avatarContainer}>
-                {userPhoto ? (
-                  <Image 
-                    source={{ uri: userPhoto }} 
-                    style={styles.avatarImage}
+    <>
+      <View style={styles.container}>
+        <View style={styles.leftSection}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)')}>
+            <Text style={styles.logo}>Streamsor</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.rightSection}>
+          {!isAuthenticated ? (
+            <>
+              <TouchableOpacity 
+                style={styles.authButton} 
+                onPress={() => handleAuthClick('login')}
+              >
+                <Text style={styles.authButtonText}>Sign In</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.authButton, styles.signUpButton]} 
+                onPress={() => handleAuthClick('signup')}
+              >
+                <Text style={styles.authButtonText}>Sign Up</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.menuContainer}>
+              <TouchableOpacity 
+                onPress={() => setMenuVisible(!menuVisible)}
+                style={{ pointerEvents: 'auto' }}
+              >
+                <View style={styles.avatarContainer}>
+                  {userPhoto ? (
+                    <Image 
+                      source={{ uri: userPhoto }} 
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <Text style={styles.avatarText}>
+                      {userEmail?.[0]?.toUpperCase() || '?'}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+              {menuVisible && (
+                <Surface style={[
+                  styles.menu, 
+                  Platform.OS === 'web' ? { 
+                    position: 'absolute',
+                    zIndex: 1000,
+                    ...Platform.select({
+                      web: {
+                        filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))'
+                      }
+                    })
+                  } : {
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }
+                ]}>
+                  <MenuItem 
+                    icon="account-circle"
+                    title="Channel"
+                    onPress={() => handleMenuItemPress('/channel')}
                   />
-                ) : (
-                  <Text style={styles.avatarText}>
-                    {userEmail?.[0]?.toUpperCase() || '?'}
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-            {menuVisible && (
-              <Surface style={[
-                styles.menu, 
-                Platform.OS === 'web' ? { 
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                  position: 'absolute',
-                  zIndex: 1000,
-                } : {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 3,
-                }
-              ]}>
-                <MenuItem 
-                  icon="account-circle"
-                  title="Channel"
-                  onPress={() => handleMenuItemPress('/channel')}
-                />
-                <MenuItem 
-                  icon="dashboard"
-                  title="Creator Dashboard"
-                  onPress={() => handleMenuItemPress('/dashboard')}
-                />
-                <MenuItem 
-                  icon="settings"
-                  title="Settings"
-                  onPress={() => handleMenuItemPress('/settings')}
-                />
-                <MenuItem 
-                  icon="logout"
-                  title={isLoggingOut ? "Logging out..." : "Log Out"}
-                  onPress={handleLogout}
-                  isDestructive
-                />
-              </Surface>
-            )}
-          </View>
-        )}
+                  <MenuItem 
+                    icon="dashboard"
+                    title="Creator Dashboard"
+                    onPress={() => handleMenuItemPress('/dashboard')}
+                  />
+                  <MenuItem 
+                    icon="settings"
+                    title="Settings"
+                    onPress={() => handleMenuItemPress('/settings')}
+                  />
+                  <MenuItem 
+                    icon="logout"
+                    title={isLoggingOut ? "Logging out..." : "Log Out"}
+                    onPress={handleLogout}
+                    isDestructive
+                  />
+                </Surface>
+              )}
+            </View>
+          )}
+        </View>
       </View>
-    </View>
+
+      <AuthModal
+        visible={showAuthModal}
+        onDismiss={() => setShowAuthModal(false)}
+        initialMode={authMode === 'login'}
+        onAuthSuccess={() => {
+          setShowAuthModal(false);
+          router.push('/(tabs)');
+        }}
+      />
+    </>
   );
 }
 

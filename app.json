@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jpherrera.streamsor"
+      "bundleIdentifier": "com.jpherrera.streamsor",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -33,6 +36,14 @@
     "assetBundlePatterns": [
       "**/*",
       "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "ecb1bd07-858b-40de-be62-20101e711ec8"
+      }
+    }
   }
 }

@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
@@ -7,7 +8,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { auth } from '../firebase';
 
@@ -17,9 +18,10 @@ type EmailValidity = 'invalid' | 'valid' | null;
 interface AuthProps {
   onAuthSuccess?: () => void;
   initialMode?: boolean; // true for login, false for signup
+  onDismiss?: () => void;
 }
 
-export default function Auth({ onAuthSuccess, initialMode = true }: AuthProps) {
+export default function Auth({ onAuthSuccess, initialMode = true, onDismiss }: AuthProps) {
   const [email, setEmail] = useState('');
   const [emailValidity, setEmailValidity] = useState<EmailValidity>(null);
   const [password, setPassword] = useState('');
@@ -176,7 +178,15 @@ export default function Auth({ onAuthSuccess, initialMode = true }: AuthProps) {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.header}>{isLogin ? 'Login' : 'Sign Up'}</Text>
+        <View style={styles.headerContainer}>
+          <Text style={styles.header}>{isLogin ? 'Login' : 'Sign Up'}</Text>
+          <TouchableOpacity 
+            style={styles.closeButton}
+            onPress={onDismiss}
+          >
+            <MaterialIcons name="close" size={24} color="#666" />
+          </TouchableOpacity>
+        </View>
         <View style={styles.inputContainer}>
           <TextInput
             style={getEmailInputStyle()}
@@ -270,13 +280,24 @@ export default function Auth({ onAuthSuccess, initialMode = true }: AuthProps) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 16,
+    width: '100%',
   },
   content: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'center',
+    width: '100%',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  closeButton: {
+    padding: 8,
+    margin: -8,
+    borderRadius: 20,
   },
   inputContainer: {
     marginBottom: 16,
@@ -287,7 +308,7 @@ const styles = StyleSheet.create({
   header: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 32,
+    marginBottom: 0,
     textAlign: 'center',
   },
   input: {

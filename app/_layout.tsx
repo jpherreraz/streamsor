@@ -2,8 +2,10 @@ import * as Font from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
-import { LogBox } from 'react-native';
+import { LogBox, Platform, StyleSheet, View } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
+import NavBar from './components/NavBar';
+import SideBar from './components/SideBar';
 import { AuthProvider } from './contexts/AuthContext';
 import app from './firebase';
 
@@ -25,11 +27,11 @@ export default function RootLayout() {
     async function prepare() {
       try {
         await Font.loadAsync({
-          'MaterialIcons': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf'),
-          'material': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf'),
-          'MaterialCommunityIcons': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf'),
-          'FontAwesome': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome.ttf'),
-          'Ionicons': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf')
+          'MaterialIcons': '/assets/fonts/MaterialIcons.ttf',
+          'material': '/assets/fonts/MaterialIcons.ttf',
+          'MaterialCommunityIcons': '/assets/fonts/MaterialCommunityIcons.ttf',
+          'FontAwesome': '/assets/fonts/FontAwesome.ttf',
+          'Ionicons': '/assets/fonts/Ionicons.ttf'
         });
       } catch (e) {
         console.warn('Error loading fonts:', e);
@@ -49,18 +51,47 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <PaperProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="auth" options={{ headerShown: false }} />
-          <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
-          <Stack.Screen name="video/[id]" options={{ headerShown: true, title: 'Video' }} />
-          <Stack.Screen name="stream/[id]" options={{ headerShown: true, title: 'Stream' }} />
-        </Stack>
+        <View style={styles.container}>
+          <NavBar />
+          <View style={styles.content}>
+            <SideBar />
+            <View style={styles.mainContent}>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                }}
+              >
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen 
+                  name="auth" 
+                  options={{ 
+                    headerShown: false,
+                    presentation: 'modal',
+                    animation: 'slide_from_bottom',
+                  }} 
+                />
+                <Stack.Screen name="settings" options={{ headerShown: false }} />
+                <Stack.Screen name="video/[id]" options={{ headerShown: false }} />
+                <Stack.Screen name="stream/[id]" options={{ headerShown: false }} />
+              </Stack>
+            </View>
+          </View>
+        </View>
       </PaperProvider>
     </AuthProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  content: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+  },
+  mainContent: {
+    flex: 1,
+  },
+});
