@@ -12,15 +12,20 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.jpherrera.streamsor",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app needs access to the camera to record videos.",
+        "NSMicrophoneUsageDescription": "This app needs access to the microphone to record audio.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to photos to upload thumbnails and profile pictures."
+      },
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.jpherrera.streamsor"
+      "package": "com.jpherrera.streamsor",
+      "versionCode": 1
     },
     "web": {
       "bundler": "metro",
@@ -28,7 +33,16 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -44,6 +58,7 @@
       "eas": {
         "projectId": "ecb1bd07-858b-40de-be62-20101e711ec8"
       }
-    }
+    },
+    "owner": "jpherrera"
   }
 }

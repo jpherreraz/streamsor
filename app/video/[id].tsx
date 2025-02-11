@@ -359,14 +359,14 @@ export default function VideoScreen() {
             <div 
               onClick={(e) => e.stopPropagation()}
               style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                padding: '16px 24px',
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
-                opacity: showControls ? 1 : 0,
-                transition: 'opacity 0.3s ease',
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: '16px 24px',
+              background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+              opacity: showControls ? 1 : 0,
+              transition: 'opacity 0.3s ease',
               }}
             >
               <div style={{
@@ -376,7 +376,7 @@ export default function VideoScreen() {
               }}>
                 <div style={{
                   position: 'relative',
-                  width: '100%',
+                width: '100%',
                   height: '4px',
                   background: 'rgba(255, 255, 255, 0.2)',
                   borderRadius: '2px',
@@ -411,17 +411,56 @@ export default function VideoScreen() {
                       cursor: 'pointer',
                     }}
                   />
-                </div>
+              </div>
 
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between',
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
                   alignItems: 'center',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <button
-                      onClick={togglePlayPause}
+                  <button
+                    onClick={togglePlayPause}
                       className="control-button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      width: '32px',
+                      height: '32px',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: 0.9,
+                      transition: 'opacity 0.2s ease',
+                    }}
+                  >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {isPlaying ? (
+                        <>
+                          <rect x="6" y="4" width="4" height="16"/>
+                          <rect x="14" y="4" width="4" height="16"/>
+                        </>
+                      ) : (
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                      )}
+                    </svg>
+                  </button>
+
+                  <div 
+                    style={{ 
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={() => setShowVolumeSlider(true)}
+                    onMouseLeave={() => setShowVolumeSlider(false)}
+                  >
+                    <button
+                      onClick={toggleMute}
+                        className="control-button"
                       style={{
                         background: 'none',
                         border: 'none',
@@ -438,143 +477,104 @@ export default function VideoScreen() {
                       }}
                     >
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {isPlaying ? (
+                        {isMuted || volume === 0 ? (
                           <>
-                            <rect x="6" y="4" width="4" height="16"/>
-                            <rect x="14" y="4" width="4" height="16"/>
+                            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                            <line x1="23" y1="9" x2="17" y2="15" />
+                            <line x1="17" y1="9" x2="23" y2="15" />
+                          </>
+                        ) : volume < 0.5 ? (
+                          <>
+                            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                           </>
                         ) : (
-                          <polygon points="5 3 19 12 5 21 5 3"/>
+                          <>
+                            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                          </>
                         )}
                       </svg>
                     </button>
 
-                    <div 
-                      style={{ 
-                        position: 'relative',
+                    <div
+                        className="volume-slider-container"
+                      style={{
+                        position: 'absolute',
+                        left: '100%',
+                        bottom: 0,
+                        height: '32px',
+                        width: showVolumeSlider ? '100px' : '0',
+                        overflow: 'hidden',
+                        transition: 'width 0.2s ease',
                         display: 'flex',
                         alignItems: 'center',
+                        paddingLeft: showVolumeSlider ? '12px' : '0',
                       }}
-                      onMouseEnter={() => setShowVolumeSlider(true)}
-                      onMouseLeave={() => setShowVolumeSlider(false)}
                     >
-                      <button
-                        onClick={toggleMute}
-                        className="control-button"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          width: '32px',
-                          height: '32px',
-                          padding: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          opacity: 0.9,
-                          transition: 'opacity 0.2s ease',
-                        }}
-                      >
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          {isMuted || volume === 0 ? (
-                            <>
-                              <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                              <line x1="23" y1="9" x2="17" y2="15" />
-                              <line x1="17" y1="9" x2="23" y2="15" />
-                            </>
-                          ) : volume < 0.5 ? (
-                            <>
-                              <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                            </>
-                          ) : (
-                            <>
-                              <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                            </>
-                          )}
-                        </svg>
-                      </button>
-
                       <div
-                        className="volume-slider-container"
                         style={{
-                          position: 'absolute',
-                          left: '100%',
-                          bottom: 0,
-                          height: '32px',
-                          width: showVolumeSlider ? '100px' : '0',
-                          overflow: 'hidden',
-                          transition: 'width 0.2s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          paddingLeft: showVolumeSlider ? '12px' : '0',
+                          position: 'relative',
+                          width: '88px',
+                          height: '4px',
+                          background: 'rgba(255, 255, 255, 0.2)',
+                          borderRadius: '2px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = e.clientX - rect.left;
+                          const newVolume = Math.max(0, Math.min(1, x / rect.width));
+                          handleVolumeChange(newVolume);
+                        }}
+                        onMouseDown={(e) => {
+                            const slider = e.currentTarget;
+                          const handleDrag = (moveEvent: MouseEvent) => {
+                              const rect = slider.getBoundingClientRect();
+                            const x = moveEvent.clientX - rect.left;
+                            const newVolume = Math.max(0, Math.min(1, x / rect.width));
+                            handleVolumeChange(newVolume);
+                          };
+                          
+                          const handleMouseUp = () => {
+                            document.removeEventListener('mousemove', handleDrag);
+                            document.removeEventListener('mouseup', handleMouseUp);
+                          };
+                          
+                          document.addEventListener('mousemove', handleDrag);
+                          document.addEventListener('mouseup', handleMouseUp);
                         }}
                       >
                         <div
                           style={{
-                            position: 'relative',
-                            width: '88px',
-                            height: '4px',
-                            background: 'rgba(255, 255, 255, 0.2)',
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            height: '100%',
+                            width: `${volume * 100}%`,
+                            background: '#fff',
                             borderRadius: '2px',
-                            cursor: 'pointer',
                           }}
-                          onClick={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const x = e.clientX - rect.left;
-                            const newVolume = Math.max(0, Math.min(1, x / rect.width));
-                            handleVolumeChange(newVolume);
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${volume * 100}%`,
+                            top: '50%',
+                            width: '12px',
+                            height: '12px',
+                            background: '#fff',
+                            borderRadius: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            transition: 'transform 0.1s ease',
                           }}
-                          onMouseDown={(e) => {
-                            const slider = e.currentTarget;
-                            const handleDrag = (moveEvent: MouseEvent) => {
-                              const rect = slider.getBoundingClientRect();
-                              const x = moveEvent.clientX - rect.left;
-                              const newVolume = Math.max(0, Math.min(1, x / rect.width));
-                              handleVolumeChange(newVolume);
-                            };
-                            
-                            const handleMouseUp = () => {
-                              document.removeEventListener('mousemove', handleDrag);
-                              document.removeEventListener('mouseup', handleMouseUp);
-                            };
-                            
-                            document.addEventListener('mousemove', handleDrag);
-                            document.addEventListener('mouseup', handleMouseUp);
-                          }}
-                        >
-                          <div
-                            style={{
-                              position: 'absolute',
-                              left: 0,
-                              top: 0,
-                              height: '100%',
-                              width: `${volume * 100}%`,
-                              background: '#fff',
-                              borderRadius: '2px',
-                            }}
-                          />
-                          <div
-                            style={{
-                              position: 'absolute',
-                              left: `${volume * 100}%`,
-                              top: '50%',
-                              width: '12px',
-                              height: '12px',
-                              background: '#fff',
-                              borderRadius: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              transition: 'transform 0.1s ease',
-                            }}
                             className="volume-slider-handle"
-                          />
-                        </div>
+                        />
                       </div>
                     </div>
                   </div>
+                </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -597,8 +597,8 @@ export default function VideoScreen() {
                           cursor: 'pointer',
                           height: '32px',
                           padding: '0 8px',
-                          display: 'flex',
-                          alignItems: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
                           gap: '4px',
                           fontSize: '14px',
                           opacity: 0.9,
@@ -806,36 +806,36 @@ export default function VideoScreen() {
                       )}
                     </div>
 
-                    <button
-                      onClick={toggleFullscreen}
+                  <button
+                    onClick={toggleFullscreen}
                       className="control-button"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        width: '32px',
-                        height: '32px',
-                        padding: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: 0.9,
-                        transition: 'opacity 0.2s ease',
-                      }}
-                    >
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {isFullscreen ? (
-                          <>
-                            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-                          </>
-                        ) : (
-                          <>
-                            <path d="M15 3h6v6M14 10l7-7M9 21H3v-6M10 14l-7 7"/>
-                          </>
-                        )}
-                      </svg>
-                    </button>
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      width: '32px',
+                      height: '32px',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: 0.9,
+                      transition: 'opacity 0.2s ease',
+                    }}
+                  >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {isFullscreen ? (
+                        <>
+                          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                        </>
+                      ) : (
+                        <>
+                          <path d="M15 3h6v6M14 10l7-7M9 21H3v-6M10 14l-7 7"/>
+                        </>
+                      )}
+                    </svg>
+                  </button>
                   </div>
                 </div>
               </div>
@@ -916,44 +916,44 @@ export default function VideoScreen() {
         display: 'flex',
         flexDirection: Platform.OS === 'web' ? 'row' : 'column',
       }}>
-        <View style={styles.mainContent}>
-          <View style={styles.videoContainer}>
-            {renderVideoPlayer()}
-            <View style={styles.infoContainer}>
+      <View style={styles.mainContent}>
+        <View style={styles.videoContainer}>
+          {renderVideoPlayer()}
+          <View style={styles.infoContainer}>
               <Text style={[styles.title, { 
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
               }]}>{video.title}</Text>
-              <View style={styles.uploaderInfo}>
-                {console.log('Rendering profile picture, URL:', video.uploader?.photoURL)}
-                {video.uploader?.photoURL ? (
-                  <Image 
-                    source={{ uri: video.uploader.photoURL }} 
-                    style={styles.uploaderAvatar}
-                    onError={(error) => console.error('Failed to load profile picture:', error)} 
-                  />
-                ) : (
-                  <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
-                    <Text style={styles.uploaderAvatarText}>
-                      {video.uploader?.email?.[0]?.toUpperCase() || '?'}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.uploaderTextInfo}>
+            <View style={styles.uploaderInfo}>
+              {console.log('Rendering profile picture, URL:', video.uploader?.photoURL)}
+              {video.uploader?.photoURL ? (
+                <Image 
+                  source={{ uri: video.uploader.photoURL }} 
+                  style={styles.uploaderAvatar}
+                  onError={(error) => console.error('Failed to load profile picture:', error)} 
+                />
+              ) : (
+                <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
+                  <Text style={styles.uploaderAvatarText}>
+                    {video.uploader?.email?.[0]?.toUpperCase() || '?'}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.uploaderTextInfo}>
                   <Text style={[styles.uploaderName, { 
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
                   }]}>
-                    {video.uploader?.email || 'Unknown User'}
-                  </Text>
+                  {video.uploader?.email || 'Unknown User'}
+                </Text>
                   <Text style={[styles.date, { 
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
                   }]}>
-                    {new Date(video.createdAt).toLocaleDateString()}
-                  </Text>
-                </View>
+                  {new Date(video.createdAt).toLocaleDateString()}
+                </Text>
               </View>
             </View>
           </View>
         </View>
+      </View>
 
         {Platform.OS === 'web' && (
           <View style={styles.recommendedContainer}>

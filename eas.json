@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 5.9.1"
+    "version": ">= 5.9.1",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -20,7 +21,12 @@
     "preview": {
       "distribution": "internal"
     },
-    "production": {}
+    "production": {
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    }
   },
   "submit": {
     "production": {}

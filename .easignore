@@ -1,0 +1,115 @@
+# Build outputs
+build/
+dist/
+web-build/
+
+# Dependencies
+node_modules/
+.yarn/
+.pnp.*
+
+# Debug & Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.npm
+*.log
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.pem
+
+# Test files
+__tests__/
+*.test.js
+*.spec.js
+coverage/
+
+# Git & Version control
+.git/
+.gitignore
+.svn/
+.hg/
+
+# Misc development files
+*.md
+LICENSE
+.editorconfig
+.prettierrc
+.eslintrc
+.babelrc
+jest.config.*
+tsconfig.*
+
+# Environment & secrets (just in case)
+.env*
+!.env.example
+
+# Cache directories
+.expo/
+.next/
+.nuxt/
+.cache/
+
+# Media & large files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.mp3
+*.wav
+
+# Temporary files
+*.tmp
+*.temp
+.*.swp
+*.swp
+*~
+
+# Documentation
+docs/
+*.pdf
+*.doc
+*.docx
+
+# Development configs
+webpack.config.js
+babel.config.js
+metro.config.js
+*.config.js
+!app.config.js
+
+# Source maps
+*.map
+
+# Firebase cache
+.firebase/
+
+# iOS specific
+ios/Pods/
+ios/build/
+*.xcuserstate
+*.xcworkspace/
+!ios/*.xcworkspace/contents.xcworkspacedata
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+# Android specific
+android/build/
+android/app/build/
+android/local.properties
+android/.gradle/
+*.iml
+.gradle/
+*.hprof 

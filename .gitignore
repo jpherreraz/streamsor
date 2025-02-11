@@ -16,6 +16,18 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+ios/build/
+android/build/
+android/app/build/
+android/captures/
+android/local.properties
+ios/Pods/
+ios/*.xcworkspace/
+ios/Podfile.lock
+ios/*.xcodeproj/*
+!ios/*.xcodeproj/project.pbxproj
+!ios/*.xcodeproj/xcshareddata/
+!ios/*.xcworkspace/contents.xcworkspacedata
 
 # Metro
 .metro-health-check*
@@ -24,26 +36,53 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+firebase-debug.log*
+database-debug.log*
+ui-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.iml
 
 # macOS
 .DS_Store
 *.pem
 
 # local env files
-.env
+.env*
+!.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # typescript
 *.tsbuildinfo
 
+# app example
 app-example
 
-# Firebase service account
+# Firebase service account and config
 functions/lib/serviceAccount.json
 functions/src/serviceAccount.json
 serviceAccount.json
+**/serviceAccount*.json
+**/google-services.json
+**/GoogleService-Info.plist
+.firebase/
 
 # Service account and compiled files
-**/serviceAccount.json
 **/*.js.map
 **/lib/**
-functions/src/serviceAccount.json
+
+# Media and temp files
+media/
+*.mp4
+*.mov
+*.m3u8
+*.backup
+*.bak
+
+# Docker
+docker-compose.override.yml
