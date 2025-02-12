@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getFirestore, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { doc, getFirestore, onSnapshot, updateDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, TextInput } from 'react-native-paper';
@@ -14,7 +13,6 @@ export default function BioEditor() {
   const [isLoading, setIsLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const firestore = getFirestore();
-  const functions = getFunctions();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -49,13 +47,17 @@ export default function BioEditor() {
 
     setIsLoading(true);
     try {
-      const updateBioFn = httpsCallable(functions, 'updateBio');
-      await updateBioFn({ bio: editedBio });
+      const userDocRef = doc(firestore, 'users', userId);
+      await updateDoc(userDocRef, {
+        bio: editedBio.trim()
+      });
+      
+      setBio(editedBio.trim());
       setIsEditing(false);
       Alert.alert('Success', 'Bio updated successfully bestie! ✨');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error updating bio:', error);
-      Alert.alert('Error', error.message || 'Failed to update bio bestie! Try again? 😭');
+      Alert.alert('Error', 'Failed to update bio bestie! Try again? 😭');
     } finally {
       setIsLoading(false);
     }
