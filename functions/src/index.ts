@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase-admin/app';
 import { cleanupFirestore } from './db/cleanupFirestore';
 import { initializeUser } from './stream/initializeUser';
+import { updateStreamTitle } from './stream/update';
 import { updateStreamEmail } from './stream/updateStreamEmail';
 import { updateStreamProfilePicture } from './stream/updateStreamProfilePicture';
-import { updateStreamTitle } from './stream/updateStreamTitle';
 import { updateUserData } from './users/updateUserData';
 import { deleteAllVideos } from './video/deleteAllVideos';
 import { getActiveStreams } from './video/getActiveStreams';

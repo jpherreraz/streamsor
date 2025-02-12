@@ -80,7 +80,13 @@ export default function NavBar() {
 
   return (
     <>
-      <SafeAreaView style={[styles.container, { paddingTop: Platform.OS === 'ios' ? insets.top / 3 : 0 }]}>
+      <SafeAreaView style={[styles.container, { 
+        paddingTop: Platform.select({
+          web: 16,
+          ios: insets.top / 3,
+          default: 0,
+        })
+      }]}>
         <View style={styles.leftSection}>
           <TouchableOpacity onPress={() => router.push('/(tabs)')}>
             <Text style={styles.logo}>Streamsor</Text>
@@ -188,7 +194,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: -8,
+    paddingVertical: Platform.select({
+      web: 16,
+      default: 8,
+    }),
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',

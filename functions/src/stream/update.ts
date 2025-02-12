@@ -2,16 +2,10 @@ import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
 import { onCall } from 'firebase-functions/v2/https';
+import { checkCloudflareWithRetry, functionConfig } from '../config';
 
 const cloudflareAccountId = defineSecret('CLOUDFLARE_ACCOUNT_ID');
 const cloudflareApiToken = defineSecret('CLOUDFLARE_API_TOKEN');
-
-const functionConfig = {
-  cors: true,
-  maxInstances: 10,
-  region: 'us-central1',
-  secrets: [cloudflareAccountId, cloudflareApiToken]
-};
 
 // Update stream title and category
 export const updateStreamTitle = onCall(functionConfig, async (request) => {
@@ -40,52 +34,61 @@ export const updateStreamTitle = onCall(functionConfig, async (request) => {
 
     const db = admin.firestore();
     console.log('Checking user doc:', liveInputId);
-    const userDoc = await db.collection('users').doc(liveInputId).get();
+    
+    // Update Cloudflare first with retry logic
+    console.log('Updating Cloudflare...');
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const response = await checkCloudflareWithRetry(
+          `https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`,
+          cloudflareApiToken.value()
+        );
 
-    if (!userDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'stream setup not found fr fr');
-    }
-
-    try {
-      console.log('Updating Cloudflare...');
-      // Update title in Cloudflare
-      const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${cloudflareApiToken.value()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          meta: {
-            name: title,
-            category,
-            uploadedBy: auth.uid
+        if (!response.ok) {
+          console.error('Cloudflare API error:', response.status);
+          if (retryCount === maxRetries - 1) {
+            throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
           }
-        })
-      });
+          retryCount++;
+          continue;
+        }
 
-      const data = await response.json();
-      console.log('Cloudflare response:', data);
-      
-      if (!data.success) {
-        console.error('Cloudflare update failed:', data.errors);
-        throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
+        const data = await response.json();
+        console.log('Cloudflare response:', data);
+        
+        if (!data.success) {
+          console.error('Cloudflare update failed:', data.errors);
+          if (retryCount === maxRetries - 1) {
+            throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
+          }
+          retryCount++;
+          continue;
+        }
+
+        break; // Success, exit retry loop
+      } catch (error) {
+        console.error(`Attempt ${retryCount + 1} failed:`, error);
+        if (retryCount === maxRetries - 1) {
+          throw new functions.https.HttpsError('internal', 'server acting mad sus rn fr fr');
+        }
+        retryCount++;
+        await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1))); // Exponential backoff
       }
-
-      console.log('Updating Firestore...');
-      // Update user doc with new stream info
-      await db.collection('users').doc(liveInputId).update({
-        streamTitle: title,
-        streamCategory: category,
-        updatedAt: admin.firestore.Timestamp.now()
-      });
-
-      console.log('Update successful!');
-      return { message: 'stream update bussin fr fr ✨' };
-    } catch (error) {
-      console.error('Error in Cloudflare/Firestore operations:', error);
-      throw new functions.https.HttpsError('internal', 'server acting sus rn');
     }
+
+    console.log('Updating Firestore...');
+    // Update user doc with new stream info in a single write
+    await db.collection('users').doc(liveInputId).update({
+      streamTitle: title,
+      streamCategory: category,
+      updatedAt: admin.firestore.Timestamp.now()
+    });
+
+    console.log('Update successful!');
+    return { message: 'stream update bussin fr fr ✨' };
   } catch (error) {
     console.error('Top level error in updateStreamTitle:', error);
     if (error instanceof functions.https.HttpsError) {
@@ -118,50 +121,36 @@ export const updateStreamProfilePicture = onCall(functionConfig, async (request)
 
     const db = admin.firestore();
     console.log('Checking user doc:', liveInputId);
-    const userDoc = await db.collection('users').doc(liveInputId).get();
+    
+    // Update Cloudflare first
+    console.log('Updating Cloudflare...');
+    const response = await checkCloudflareWithRetry(
+      `https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`,
+      cloudflareApiToken.value()
+    );
 
-    if (!userDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'stream setup not found fr fr');
+    if (!response.ok) {
+      console.error('Cloudflare API error:', response.status);
+      throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
     }
 
-    try {
-      console.log('Updating Cloudflare...');
-      // Update profile picture in Cloudflare
-      const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${cloudflareApiToken.value()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          meta: {
-            uploaderPhotoURL: photoURL,
-            uploadedBy: auth.uid
-          }
-        })
-      });
-
-      const data = await response.json();
-      console.log('Cloudflare response:', data);
-      
-      if (!data.success) {
-        console.error('Cloudflare update failed:', data.errors);
-        throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
-      }
-
-      console.log('Updating Firestore...');
-      // Update user doc with new profile picture
-      await db.collection('users').doc(liveInputId).update({
-        profilePicture: photoURL,
-        updatedAt: admin.firestore.Timestamp.now()
-      });
-
-      console.log('Update successful!');
-      return { message: 'profile pic update bussin fr fr ✨' };
-    } catch (error) {
-      console.error('Error in Cloudflare/Firestore operations:', error);
-      throw new functions.https.HttpsError('internal', 'server acting sus rn');
+    const data = await response.json();
+    console.log('Cloudflare response:', data);
+    
+    if (!data.success) {
+      console.error('Cloudflare update failed:', data.errors);
+      throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
     }
+
+    console.log('Updating Firestore...');
+    // Update user doc with new profile picture in a single write
+    await db.collection('users').doc(liveInputId).update({
+      profilePicture: photoURL,
+      updatedAt: admin.firestore.Timestamp.now()
+    });
+
+    console.log('Update successful!');
+    return { message: 'profile pic update bussin fr fr ✨' };
   } catch (error) {
     console.error('Top level error in updateStreamProfilePicture:', error);
     if (error instanceof functions.https.HttpsError) {
@@ -194,50 +183,36 @@ export const updateStreamEmail = onCall(functionConfig, async (request) => {
 
     const db = admin.firestore();
     console.log('Checking user doc:', liveInputId);
-    const userDoc = await db.collection('users').doc(liveInputId).get();
+    
+    // Update Cloudflare first
+    console.log('Updating Cloudflare...');
+    const response = await checkCloudflareWithRetry(
+      `https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`,
+      cloudflareApiToken.value()
+    );
 
-    if (!userDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'stream setup not found fr fr');
+    if (!response.ok) {
+      console.error('Cloudflare API error:', response.status);
+      throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
     }
 
-    try {
-      console.log('Updating Cloudflare...');
-      // Update email in Cloudflare
-      const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.value()}/stream/live_inputs/${liveInputId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${cloudflareApiToken.value()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          meta: {
-            uploaderEmail: email,
-            uploadedBy: auth.uid
-          }
-        })
-      });
-
-      const data = await response.json();
-      console.log('Cloudflare response:', data);
-      
-      if (!data.success) {
-        console.error('Cloudflare update failed:', data.errors);
-        throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
-      }
-
-      console.log('Updating Firestore...');
-      // Update user doc with new email
-      await db.collection('users').doc(liveInputId).update({
-        email: email,
-        updatedAt: admin.firestore.Timestamp.now()
-      });
-
-      console.log('Update successful!');
-      return { message: 'email update bussin fr fr ✨' };
-    } catch (error) {
-      console.error('Error in Cloudflare/Firestore operations:', error);
-      throw new functions.https.HttpsError('internal', 'server acting sus rn');
+    const data = await response.json();
+    console.log('Cloudflare response:', data);
+    
+    if (!data.success) {
+      console.error('Cloudflare update failed:', data.errors);
+      throw new functions.https.HttpsError('internal', 'Failed to update stream info no cap');
     }
+
+    console.log('Updating Firestore...');
+    // Update user doc with new email in a single write
+    await db.collection('users').doc(liveInputId).update({
+      email: email,
+      updatedAt: admin.firestore.Timestamp.now()
+    });
+
+    console.log('Update successful!');
+    return { message: 'email update bussin fr fr ✨' };
   } catch (error) {
     console.error('Top level error in updateStreamEmail:', error);
     if (error instanceof functions.https.HttpsError) {
@@ -247,7 +222,7 @@ export const updateStreamEmail = onCall(functionConfig, async (request) => {
   }
 });
 
+// Only export the valid files
 export * from './updateStreamEmail';
 export * from './updateStreamProfilePicture';
-export * from './updateStreamTitle';
 

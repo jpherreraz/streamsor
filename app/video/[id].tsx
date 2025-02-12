@@ -1,9 +1,9 @@
-import { Video, ResizeMode } from 'expo-av';
+import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams } from 'expo-router';
 import { httpsCallable } from 'firebase/functions';
 import Hls from 'hls.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, ImageStyle, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Image, ImageStyle, Platform, ScrollView, StyleSheet, Text, TextStyle, TouchableOpacity, View, ViewStyle } from 'react-native';
 import { functions } from '../firebaseConfig';
 
 interface Video {
@@ -19,6 +19,103 @@ interface Video {
     email?: string;
   };
 }
+
+const ShimmerEffect = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    shimmer.start();
+
+    return () => shimmer.stop();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFillObject,
+        {
+          opacity: shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.3, 0.7],
+          }),
+          backgroundColor: '#fff',
+        },
+      ]}
+    />
+  );
+};
+
+const LoadingSkeleton = () => (
+  <ScrollView style={{ flex: 1 }} bounces={false}>
+    <View style={styles.mainContent}>
+      <View style={styles.videoContainer}>
+        <View style={[styles.videoWrapper, styles.skeletonItem]}>
+          <ShimmerEffect />
+        </View>
+        <View style={styles.infoContainer}>
+          <View style={[styles.skeletonItem, { height: 24, width: '80%', marginBottom: 16 }]}>
+            <ShimmerEffect />
+          </View>
+          <View style={styles.uploaderInfo}>
+            <View style={[styles.uploaderAvatar, styles.skeletonItem]}>
+              <ShimmerEffect />
+            </View>
+            <View style={styles.uploaderTextInfo}>
+              <View style={[styles.skeletonItem, { height: 16, width: 120, marginBottom: 4 }]}>
+                <ShimmerEffect />
+              </View>
+              <View style={[styles.skeletonItem, { height: 14, width: 80 }]}>
+                <ShimmerEffect />
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+    
+    <View style={[styles.recommendedContainer, Platform.OS !== 'web' && styles.mobileRecommendedContainer]}>
+      <View style={[styles.skeletonItem, { height: 24, width: 180, marginBottom: 16 }]}>
+        <ShimmerEffect />
+      </View>
+      <View>
+        {[...Array(3)].map((_, index) => (
+          <View key={index} style={[styles.recommendedVideoCard]}>
+            <View style={[styles.recommendedThumbnailContainer, styles.skeletonItem]}>
+              <ShimmerEffect />
+            </View>
+            <View style={styles.recommendedVideoInfo}>
+              <View style={[styles.skeletonItem, { height: 16, width: '90%', marginBottom: 8 }]}>
+                <ShimmerEffect />
+              </View>
+              <View style={styles.recommendedUploaderInfo}>
+                <View style={[styles.recommendedUploaderPhoto, styles.skeletonItem]}>
+                  <ShimmerEffect />
+                </View>
+                <View style={[styles.skeletonItem, { height: 14, width: 100 }]}>
+                  <ShimmerEffect />
+                </View>
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  </ScrollView>
+);
 
 export default function VideoScreen() {
   const { id } = useLocalSearchParams();
@@ -884,7 +981,11 @@ export default function VideoScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        {Platform.OS === 'web' ? (
+          <ActivityIndicator size="large" color="#007AFF" />
+        ) : (
+          <LoadingSkeleton />
+        )}
       </View>
     );
   }
@@ -953,13 +1054,15 @@ export default function VideoScreen() {
             </View>
           </View>
 
-          <View style={styles.recommendedContainer}>
+          <View style={[styles.recommendedContainer, Platform.OS !== 'web' && styles.mobileRecommendedContainer]}>
             <Text style={styles.recommendedHeader}>Recommended Videos</Text>
-            {recommendedVideos.map(renderRecommendedVideo)}
+            <View style={styles.recommendedList}>
+              {recommendedVideos.map(renderRecommendedVideo)}
+            </View>
           </View>
         </div>
       ) : (
-        <View style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} bounces={false}>
           <View style={styles.mainContent}>
             <View style={styles.videoContainer}>
               {renderVideoPlayer()}
@@ -990,7 +1093,14 @@ export default function VideoScreen() {
               </View>
             </View>
           </View>
-        </View>
+          
+          <View style={[styles.recommendedContainer, Platform.OS !== 'web' && styles.mobileRecommendedContainer]}>
+            <Text style={styles.recommendedHeader}>Recommended Videos</Text>
+            <ScrollView style={styles.recommendedList} showsVerticalScrollIndicator={false}>
+              {recommendedVideos.map(renderRecommendedVideo)}
+            </ScrollView>
+          </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -1000,13 +1110,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    height: '100vh',
-  },
+  } as ViewStyle,
   mainContent: {
     flex: 1,
     position: 'relative',
     height: '100%',
-  },
+  } as ViewStyle,
   videoContainer: {
     flex: 1,
     position: 'relative',
@@ -1014,30 +1123,30 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     height: 'auto',
     minHeight: 0,
-  },
+  } as ViewStyle,
   infoContainer: {
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-  },
+  } as ViewStyle,
   title: {
     color: '#1a1a1a',
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 8,
-  },
+  } as TextStyle,
   uploaderInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
-  },
+  } as ViewStyle,
   uploaderAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
     marginRight: 8,
-  },
+  } as ImageStyle,
   uploaderAvatarPlaceholder: {
     width: 32,
     height: 32,
@@ -1046,113 +1155,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
-  },
+  } as ViewStyle,
   uploaderAvatarText: {
     color: '#666',
     fontSize: 14,
-  },
+  } as TextStyle,
   uploaderTextInfo: {
     flexDirection: 'column',
-  },
+  } as ViewStyle,
   uploaderName: {
     color: '#1a1a1a',
     fontSize: 16,
-  },
+  } as TextStyle,
   date: {
     color: '#666',
     fontSize: 14,
-  },
+  } as TextStyle,
   errorText: {
     color: '#ff3b30',
     fontSize: 16,
     textAlign: 'center',
-  },
+  } as TextStyle,
   videoWrapper: {
     width: '100%',
-    height: Dimensions.get('window').height * 0.4,
+    aspectRatio: 16/9,
     backgroundColor: '#000',
-  },
+  } as ViewStyle,
   video: {
     flex: 1,
-  },
-  webVideoContainer: {
-    position: 'relative',
-    width: '100%',
-    paddingTop: '56.25%', // 16:9 aspect ratio
-    backgroundColor: '#000', // Keep video container black for better viewing
-    overflow: 'hidden',
-  },
-  webVideo: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
-    backgroundColor: '#000', // Keep video background black
-  },
-  controls: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  playbackControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  timeText: {
-    color: '#fff', // Keep time text white for visibility on video
-    fontSize: 14,
-    marginHorizontal: 8,
-  },
-  playbackBarContainer: {
-    flex: 1,
-    height: 20,
-    position: 'relative',
-  },
-  playbackBar: {
-    position: 'absolute',
-    top: '50%',
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
-    transform: [{ translateY: -2 }],
-  },
-  playbackProgress: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    height: '100%',
-    backgroundColor: '#007AFF',
-    borderRadius: 2,
-  },
-  playbackSlider: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0,
-    cursor: 'pointer',
-  },
-  bufferingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
+  } as ViewStyle,
   recommendedContainer: {
     width: 400,
     backgroundColor: '#fff',
@@ -1160,26 +1193,24 @@ const styles = StyleSheet.create({
     borderLeftColor: '#eee',
     padding: 16,
     height: Platform.OS === 'web' ? '100%' : undefined,
-    overflow: 'auto',
   } as ViewStyle,
   recommendedHeader: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
     color: '#1a1a1a',
-  },
+  } as TextStyle,
   recommendedVideoCard: {
     marginBottom: 16,
     backgroundColor: '#fff',
     borderRadius: 8,
     overflow: 'hidden',
-    ...(Platform.OS === 'web' ? { cursor: 'pointer' } as any : {}),
-  },
+  } as ViewStyle,
   recommendedThumbnailContainer: {
     position: 'relative',
     width: '100%',
     aspectRatio: 16 / 9,
-  },
+  } as ViewStyle,
   recommendedThumbnail: {
     width: '100%',
     height: '100%',
@@ -1193,34 +1224,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-  },
+  } as ViewStyle,
   recommendedDurationText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '500',
-  },
+  } as TextStyle,
   recommendedVideoInfo: {
     padding: 12,
-  },
+  } as ViewStyle,
   recommendedTitle: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
     color: '#1a1a1a',
-    lineHeight: 20,
-  },
+  } as TextStyle,
   recommendedUploaderInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
+  } as ViewStyle,
   recommendedUploaderPhoto: {
     width: 20,
     height: 20,
     borderRadius: 10,
     marginRight: 8,
-  },
+  } as ImageStyle,
   recommendedUploaderName: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#666',
-  },
+  } as TextStyle,
+  mobileRecommendedContainer: {
+    width: '100%',
+    borderLeftWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    height: undefined,
+    flex: 1,
+  } as ViewStyle,
+  recommendedList: {
+    flexGrow: 1,
+  } as ViewStyle,
+  bufferingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  } as ViewStyle,
+  skeletonItem: {
+    backgroundColor: '#e0e0e0',
+    borderRadius: 8,
+    overflow: 'hidden',
+  } as ViewStyle,
 }); 

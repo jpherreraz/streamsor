@@ -4,7 +4,7 @@ import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import Hls from 'hls.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Platform, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import StreamChat from '../components/StreamChat';
 
 interface Stream {
@@ -28,6 +28,146 @@ interface UserData {
   profilePicture?: string;
   streamTitle?: string;
 }
+
+const ShimmerEffect = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    shimmer.start();
+
+    return () => shimmer.stop();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFillObject,
+        {
+          opacity: shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.3, 0.7],
+          }),
+          backgroundColor: '#fff',
+        },
+      ]}
+    />
+  );
+};
+
+const LoadingSkeleton = () => (
+  <View style={styles.container}>
+    {Platform.OS === 'web' ? (
+      <div style={{ 
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'row',
+      }}>
+        <View style={styles.mainContent}>
+          <View style={styles.videoContainer}>
+            <View style={[styles.videoWrapper, styles.skeletonItem]}>
+              <ShimmerEffect />
+            </View>
+          </View>
+          <View style={styles.infoContainer}>
+            <View style={[styles.skeletonItem, { height: 28, width: '60%', marginBottom: 16, borderRadius: 4 }]}>
+              <ShimmerEffect />
+            </View>
+            <View style={styles.uploaderInfo}>
+              <View style={[styles.uploaderAvatar, styles.skeletonItem, { width: 40, height: 40, borderRadius: 20 }]}>
+                <ShimmerEffect />
+              </View>
+              <View style={styles.uploaderTextInfo}>
+                <View style={[styles.skeletonItem, { height: 18, width: 140, marginBottom: 4, borderRadius: 4 }]}>
+                  <ShimmerEffect />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View style={styles.chatContainer}>
+          <View style={styles.chatMessages}>
+            {[...Array(8)].map((_, index) => (
+              <View key={index} style={[styles.chatMessageContainer, { marginBottom: 16 }]}>
+                <View style={[styles.skeletonItem, { width: 32, height: 32, borderRadius: 16, marginRight: 12 }]}>
+                  <ShimmerEffect />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.skeletonItem, { height: 16, width: '30%', marginBottom: 6, borderRadius: 4 }]}>
+                    <ShimmerEffect />
+                  </View>
+                  <View style={[styles.skeletonItem, { height: 14, width: '80%', borderRadius: 4 }]}>
+                    <ShimmerEffect />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </div>
+    ) : (
+      <View style={styles.mobileContainer}>
+        <View style={styles.topSection}>
+          <View style={styles.videoSection}>
+            <View style={[styles.videoWrapper, styles.skeletonItem]}>
+              <ShimmerEffect />
+            </View>
+          </View>
+          
+          <View style={styles.infoSection}>
+            <View style={[styles.skeletonItem, { height: 24, width: '80%', marginBottom: 16, borderRadius: 4 }]}>
+              <ShimmerEffect />
+            </View>
+            <View style={styles.uploaderInfo}>
+              <View style={[styles.uploaderAvatar, styles.skeletonItem, { width: 40, height: 40, borderRadius: 20 }]}>
+                <ShimmerEffect />
+              </View>
+              <View style={styles.uploaderTextInfo}>
+                <View style={[styles.skeletonItem, { height: 18, width: 140, marginBottom: 4, borderRadius: 4 }]}>
+                  <ShimmerEffect />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.chatSection}>
+          <View style={styles.chatMessages}>
+            {[...Array(6)].map((_, index) => (
+              <View key={index} style={[styles.chatMessageContainer, { marginBottom: 16 }]}>
+                <View style={[styles.skeletonItem, { width: 32, height: 32, borderRadius: 16, marginRight: 12 }]}>
+                  <ShimmerEffect />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.skeletonItem, { height: 16, width: '30%', marginBottom: 6, borderRadius: 4 }]}>
+                    <ShimmerEffect />
+                  </View>
+                  <View style={[styles.skeletonItem, { height: 14, width: '70%', borderRadius: 4 }]}>
+                    <ShimmerEffect />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    )}
+  </View>
+);
 
 export default function StreamScreen() {
   const { id } = useLocalSearchParams();
@@ -56,6 +196,7 @@ export default function StreamScreen() {
   const [volume, setVolume] = useState(1);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isBuffering, setIsBuffering] = useState(false);
 
   console.log('Stream route ID:', id);
 
@@ -675,6 +816,7 @@ export default function StreamScreen() {
     return (
       <View style={styles.videoWrapper}>
         <Video
+          ref={videoRef as any}
           source={{ uri: stream?.playbackUrl || '' }}
           rate={1.0}
           volume={1.0}
@@ -683,15 +825,30 @@ export default function StreamScreen() {
           shouldPlay={isPlaying}
           style={styles.video}
           useNativeControls
+          onPlaybackStatusUpdate={status => {
+            if (status.isLoaded) {
+              setIsPlaying(status.isPlaying);
+              setIsMuted(status.isMuted);
+            }
+          }}
         />
+        {isBuffering && (
+          <View style={styles.bufferingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
       </View>
     );
   };
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+      <View style={styles.container}>
+        {Platform.OS === 'web' ? (
+          <ActivityIndicator size="large" color="#007AFF" />
+        ) : (
+          <LoadingSkeleton />
+        )}
       </View>
     );
   }
@@ -713,39 +870,86 @@ export default function StreamScreen() {
   }
 
   return (
-    <View style={[styles.container, { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif' }]}>
-      <View style={styles.mainContent}>
-        <View style={styles.videoContainer}>
-          {renderVideoPlayer()}
-        </View>
-        <View style={styles.infoContainer}>
-          <Text style={[styles.title, { fontFamily: 'inherit' }]}>{stream.title}</Text>
-          <View style={styles.uploaderInfo}>
-            {console.log('Rendering profile picture, URL:', stream.uploader?.photoURL)}
-            {stream.uploader?.photoURL ? (
-              <Image 
-                source={{ uri: stream.uploader.photoURL }} 
-                style={styles.uploaderAvatar}
-                onError={(error) => console.error('Failed to load profile picture:', error)} 
-              />
-            ) : (
-              <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
-                <Text style={styles.uploaderAvatarText}>
-                  {stream.uploader?.email?.[0]?.toUpperCase() || '?'}
-                </Text>
+    <View style={styles.container}>
+      {Platform.OS === 'web' ? (
+        <div style={{ 
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'row',
+        }}>
+          <View style={styles.mainContent}>
+            <View style={styles.videoContainer}>
+              {renderVideoPlayer()}
+            </View>
+            <View style={styles.infoContainer}>
+              <Text style={[styles.title, { fontFamily: 'inherit' }]}>{stream.title}</Text>
+              <View style={styles.uploaderInfo}>
+                {console.log('Rendering profile picture, URL:', stream.uploader?.photoURL)}
+                {stream.uploader?.photoURL ? (
+                  <Image 
+                    source={{ uri: stream.uploader.photoURL }} 
+                    style={styles.uploaderAvatar}
+                    onError={(error) => console.error('Failed to load profile picture:', error)} 
+                  />
+                ) : (
+                  <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
+                    <Text style={styles.uploaderAvatarText}>
+                      {stream.uploader?.email?.[0]?.toUpperCase() || '?'}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.uploaderTextInfo}>
+                  <Text style={[styles.uploaderName, { fontFamily: 'inherit' }]}>
+                    {stream.uploader?.email?.split('@')[0] || 'Unknown User'}
+                  </Text>
+                </View>
               </View>
-            )}
-            <View style={styles.uploaderTextInfo}>
-              <Text style={[styles.uploaderName, { fontFamily: 'inherit' }]}>
-                {stream.uploader?.email?.split('@')[0] || 'Unknown User'}
-              </Text>
             </View>
           </View>
+          <View style={styles.chatContainer}>
+            <StreamChat streamId={id as string} />
+          </View>
+        </div>
+      ) : (
+        <View style={styles.mobileContainer}>
+          <View style={styles.topSection}>
+            <View style={styles.videoSection}>
+              {renderVideoPlayer()}
+            </View>
+            
+            <View style={styles.infoSection}>
+              <Text style={styles.title} numberOfLines={2}>
+                {stream.title}
+              </Text>
+              
+              <View style={styles.uploaderInfo}>
+                {stream.uploader?.photoURL ? (
+                  <Image 
+                    source={{ uri: stream.uploader.photoURL }} 
+                    style={styles.uploaderAvatar}
+                  />
+                ) : (
+                  <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
+                    <Text style={styles.uploaderAvatarText}>
+                      {stream.uploader?.email?.[0]?.toUpperCase() || '?'}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.uploaderTextInfo}>
+                  <Text style={styles.uploaderName} numberOfLines={1}>
+                    {stream.uploader?.email?.split('@')[0] || 'Unknown User'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.chatSection}>
+            <StreamChat streamId={id as string} />
+          </View>
         </View>
-      </View>
-      <View style={styles.chatContainer}>
-        <StreamChat streamId={id as string} />
-      </View>
+      )}
     </View>
   );
 }
@@ -772,11 +976,13 @@ const styles = StyleSheet.create({
   },
   videoWrapper: {
     width: '100%',
-    height: Dimensions.get('window').height * 0.4,
+    aspectRatio: 16/9,
     backgroundColor: '#000',
   },
   video: {
     flex: 1,
+    width: '100%',
+    height: '100%',
   },
   infoContainer: {
     padding: 16,
@@ -839,4 +1045,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  bufferingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileContainer: {
+    flex: 1,
+    flexDirection: 'column',
+    backgroundColor: '#fff',
+  },
+  topSection: {
+    width: '100%',
+  },
+  videoSection: {
+    width: '100%',
+    backgroundColor: '#000',
+  },
+  infoSection: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  chatSection: {
+    flex: 1,
+    borderTopWidth: 1,
+    borderColor: '#eee',
+    backgroundColor: '#fff',
+  },
+  skeletonItem: {
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+  } as ViewStyle,
+  chatMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+  } as ViewStyle,
+  chatMessages: {
+    flex: 1,
+    paddingVertical: 16,
+  } as ViewStyle,
 }); 

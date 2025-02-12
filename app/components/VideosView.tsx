@@ -244,7 +244,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    padding: 16,
+    ...Platform.select({
+      ios: {
+        padding: 12,
+      },
+      default: {
+        padding: 16,
+      },
+    }),
   },
   header: {
     fontSize: 24,
@@ -253,7 +260,14 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
   },
   listContainer: {
-    padding: 8,
+    ...Platform.select({
+      ios: {
+        padding: 4,
+      },
+      default: {
+        padding: 8,
+      },
+    }),
   },
   row: {
     gap: 8,
