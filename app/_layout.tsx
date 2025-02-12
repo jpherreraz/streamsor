@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
 import { LogBox, Platform, StyleSheet, View } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import NavBar from './components/NavBar';
 import SideBar from './components/SideBar';
 import { AuthProvider } from './contexts/AuthContext';
@@ -49,36 +50,38 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <PaperProvider>
-        <View style={styles.container}>
-          <NavBar />
-          <View style={styles.content}>
-            <SideBar />
-            <View style={styles.mainContent}>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                }}
-              >
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen 
-                  name="auth" 
-                  options={{ 
+    <SafeAreaProvider>
+      <AuthProvider>
+        <PaperProvider>
+          <View style={styles.container}>
+            <NavBar />
+            <View style={styles.content}>
+              <SideBar />
+              <View style={styles.mainContent}>
+                <Stack
+                  screenOptions={{
                     headerShown: false,
-                    presentation: 'modal',
-                    animation: 'slide_from_bottom',
-                  }} 
-                />
-                <Stack.Screen name="settings" options={{ headerShown: false }} />
-                <Stack.Screen name="video/[id]" options={{ headerShown: false }} />
-                <Stack.Screen name="stream/[id]" options={{ headerShown: false }} />
-              </Stack>
+                  }}
+                >
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen 
+                    name="auth" 
+                    options={{ 
+                      headerShown: false,
+                      presentation: 'modal',
+                      animation: 'slide_from_bottom',
+                    }} 
+                  />
+                  <Stack.Screen name="settings" options={{ headerShown: false }} />
+                  <Stack.Screen name="video/[id]" options={{ headerShown: false }} />
+                  <Stack.Screen name="stream/[id]" options={{ headerShown: false }} />
+                </Stack>
+              </View>
             </View>
           </View>
-        </View>
-      </PaperProvider>
-    </AuthProvider>
+        </PaperProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 

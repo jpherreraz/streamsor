@@ -4,6 +4,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Surface } from 'react-native-paper';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '../firebase';
 import AuthModal from './AuthModal';
 
@@ -15,6 +16,7 @@ interface MenuItemProps {
 }
 
 export default function NavBar() {
+  const insets = useSafeAreaInsets();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function NavBar() {
 
   return (
     <>
-      <View style={styles.container}>
+      <SafeAreaView style={[styles.container, { paddingTop: Platform.OS === 'ios' ? insets.top / 3 : 0 }]}>
         <View style={styles.leftSection}>
           <TouchableOpacity onPress={() => router.push('/(tabs)')}>
             <Text style={styles.logo}>Streamsor</Text>
@@ -165,7 +167,7 @@ export default function NavBar() {
             </View>
           )}
         </View>
-      </View>
+      </SafeAreaView>
 
       <AuthModal
         visible={showAuthModal}
@@ -185,7 +187,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: -8,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',

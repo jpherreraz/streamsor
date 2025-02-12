@@ -1,9 +1,9 @@
-import { Video as ExpoVideo, ResizeMode } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import { useLocalSearchParams } from 'expo-router';
 import { httpsCallable } from 'firebase/functions';
 import Hls from 'hls.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ImageStyle, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, ImageStyle, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import { functions } from '../firebaseConfig';
 
 interface Video {
@@ -312,7 +312,7 @@ export default function VideoScreen() {
     </TouchableOpacity>
   );
 
-  const renderVideoPlayer = () => {
+  const renderVideoPlayer = (): JSX.Element => {
     if (Platform.OS === 'web') {
       return (
         <div 
@@ -848,27 +848,24 @@ export default function VideoScreen() {
           )}
         </div>
       );
-    } else {
-      return (
-        <ExpoVideo
+    }
+    
+    return (
+      <View style={styles.videoWrapper}>
+        <Video
+          ref={videoRef as any}
           source={{ uri: video?.playbackUrl || '' }}
           rate={1.0}
           volume={1.0}
-          isMuted={false}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={true}
-          isLooping={false}
-          style={{
-            flex: 1,
-            width: '100%',
-            height: '100%',
-            backgroundColor: '#000',
-          } as ViewStyle}
+          isMuted={isMuted}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay={isPlaying}
+          style={styles.video}
           useNativeControls
         />
-      );
-    }
-  }
+      </View>
+    );
+  };
 
   const handleQualityChange = (level: number) => {
     if (!hlsRef.current) return;
@@ -910,58 +907,91 @@ export default function VideoScreen() {
 
   return (
     <View style={[styles.container, Platform.OS === 'web' && { height: Platform.OS === 'web' ? '100%' : undefined }]}>
-      <div style={{ 
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
-        flex: 1,
-        display: 'flex',
-        flexDirection: Platform.OS === 'web' ? 'row' : 'column',
-      }}>
-      <View style={styles.mainContent}>
-        <View style={styles.videoContainer}>
-          {renderVideoPlayer()}
-          <View style={styles.infoContainer}>
-              <Text style={[styles.title, { 
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
-              }]}>{video.title}</Text>
-            <View style={styles.uploaderInfo}>
-              {console.log('Rendering profile picture, URL:', video.uploader?.photoURL)}
-              {video.uploader?.photoURL ? (
-                <Image 
-                  source={{ uri: video.uploader.photoURL }} 
-                  style={styles.uploaderAvatar}
-                  onError={(error) => console.error('Failed to load profile picture:', error)} 
-                />
-              ) : (
-                <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
-                  <Text style={styles.uploaderAvatarText}>
-                    {video.uploader?.email?.[0]?.toUpperCase() || '?'}
-                  </Text>
+      {Platform.OS === 'web' ? (
+        <div style={{ 
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
+          flex: 1,
+          display: 'flex',
+          flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+        }}>
+          <View style={styles.mainContent}>
+            <View style={styles.videoContainer}>
+              {renderVideoPlayer()}
+              <View style={styles.infoContainer}>
+                <Text style={[styles.title, { 
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
+                }]}>{video.title}</Text>
+                <View style={styles.uploaderInfo}>
+                  {console.log('Rendering profile picture, URL:', video.uploader?.photoURL)}
+                  {video.uploader?.photoURL ? (
+                    <Image 
+                      source={{ uri: video.uploader.photoURL }} 
+                      style={styles.uploaderAvatar}
+                      onError={(error) => console.error('Failed to load profile picture:', error)} 
+                    />
+                  ) : (
+                    <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
+                      <Text style={styles.uploaderAvatarText}>
+                        {video.uploader?.email?.[0]?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.uploaderTextInfo}>
+                      <Text style={[styles.uploaderName, { 
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
+                      }]}>
+                      {video.uploader?.email || 'Unknown User'}
+                    </Text>
+                      <Text style={[styles.date, { 
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
+                      }]}>
+                      {new Date(video.createdAt).toLocaleDateString()}
+                    </Text>
+                  </View>
                 </View>
-              )}
-              <View style={styles.uploaderTextInfo}>
-                  <Text style={[styles.uploaderName, { 
-                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
-                  }]}>
-                  {video.uploader?.email || 'Unknown User'}
-                </Text>
-                  <Text style={[styles.date, { 
-                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
-                  }]}>
-                  {new Date(video.createdAt).toLocaleDateString()}
-                </Text>
               </View>
             </View>
           </View>
-        </View>
-      </View>
 
-        {Platform.OS === 'web' && (
           <View style={styles.recommendedContainer}>
             <Text style={styles.recommendedHeader}>Recommended Videos</Text>
             {recommendedVideos.map(renderRecommendedVideo)}
           </View>
-        )}
-      </div>
+        </div>
+      ) : (
+        <View style={{ flex: 1 }}>
+          <View style={styles.mainContent}>
+            <View style={styles.videoContainer}>
+              {renderVideoPlayer()}
+              <View style={styles.infoContainer}>
+                <Text style={styles.title}>{video.title}</Text>
+                <View style={styles.uploaderInfo}>
+                  {video.uploader?.photoURL ? (
+                    <Image 
+                      source={{ uri: video.uploader.photoURL }} 
+                      style={styles.uploaderAvatar}
+                    />
+                  ) : (
+                    <View style={[styles.uploaderAvatar, styles.uploaderAvatarPlaceholder]}>
+                      <Text style={styles.uploaderAvatarText}>
+                        {video.uploader?.email?.[0]?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.uploaderTextInfo}>
+                    <Text style={styles.uploaderName}>
+                      {video.uploader?.email || 'Unknown User'}
+                    </Text>
+                    <Text style={styles.date}>
+                      {new Date(video.createdAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1036,6 +1066,14 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
     fontSize: 16,
     textAlign: 'center',
+  },
+  videoWrapper: {
+    width: '100%',
+    height: Dimensions.get('window').height * 0.4,
+    backgroundColor: '#000',
+  },
+  video: {
+    flex: 1,
   },
   webVideoContainer: {
     position: 'relative',

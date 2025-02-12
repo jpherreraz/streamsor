@@ -1,5 +1,5 @@
-import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Keyboard, KeyboardEvent, Platform, StyleSheet, View } from 'react-native';
 import { Modal, Portal } from 'react-native-paper';
 import Auth from './Auth';
 
@@ -11,12 +11,38 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ visible, onDismiss, onAuthSuccess, initialMode = true }: AuthModalProps) {
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardWillShow', (event: KeyboardEvent) => {
+      if (Platform.OS === 'ios') {
+        setKeyboardOffset(event.endCoordinates.height);
+      }
+    });
+    const hideSubscription = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardOffset(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   return (
     <Portal>
       <Modal
         visible={visible}
         onDismiss={onDismiss}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container, 
+          Platform.OS === 'ios' ? {
+            marginTop: 200,
+            transform: [{ translateY: -keyboardOffset / 2 }]
+          } : {
+            marginTop: 200
+          }
+        ]}
       >
         <View style={styles.modalContent}>
           <Auth 
@@ -39,6 +65,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+    ...Platform.select({
+      ios: {
+        marginTop: 200, // Push it down more on mobile
+      },
+      android: {
+        marginTop: 200,
+      },
+    }),
   },
   modalContent: {
     width: '100%',
